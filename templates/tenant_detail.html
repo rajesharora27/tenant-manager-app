@@ -1,0 +1,305 @@
+{% extends "base.html" %}
+
+{% block title %}{{ tenant.name or 'Tenant Details' }} - SSE Tenant Manager{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb">
+                <li class="breadcrumb-item"><a href="{{ url_for('index') }}">Dashboard</a></li>
+                <li class="breadcrumb-item"><a href="{{ url_for('list_tenants') }}">All Tenants</a></li>
+                <li class="breadcrumb-item active">{{ tenant.name or 'Tenant Details' }}</li>
+            </ol>
+        </nav>
+    </div>
+    <div>
+        <a href="{{ url_for('list_tenants') }}" class="btn btn-secondary">
+            <i class="fas fa-arrow-left"></i> Back to List
+        </a>
+        <button type="button" class="btn btn-danger" 
+                onclick="window.deleteTenant('{{ tenant.id or tenant.organizationId }}', '{{ tenant.name or 'Unnamed Tenant' }}')"
+            <i class="fas fa-trash"></i> Delete Tenant
+        </button>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-header">
+                <div class="d-flex justify-content-between align-items-center">
+                    <h4 class="card-title mb-0">
+                        <i class="fas fa-building"></i> {{ tenant.name or 'Unnamed Tenant' }}
+                    </h4>
+                    <span class="badge bg-{{ 'success' if tenant.status == 'ACTIVE' else 'warning' }} fs-6">
+                        {{ tenant.status or 'Unknown Status' }}
+                    </span>
+                </div>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <h6><i class="fas fa-info-circle"></i> Basic Information</h6>
+                        <table class="table table-sm">
+                            <tbody>
+                                <tr>
+                                    <td><strong>Tenant ID:</strong></td>
+                                    <td>
+                                        <code>{{ tenant.id or tenant.organizationId }}</code>
+                                        <button class="btn btn-sm btn-outline-secondary ms-2" 
+                                                onclick="copyToClipboard('{{ tenant.id or tenant.organizationId }}')">
+                                            <i class="fas fa-copy"></i>
+                                        </button>
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Name:</strong></td>
+                                    <td>{{ tenant.name or 'Not specified' }}</td>
+                                </tr>
+                                {% if tenant.package %}
+                                <tr>
+                                    <td><strong>Package:</strong></td>
+                                    <td><span class="badge bg-info">{{ tenant.package }}</span></td>
+                                </tr>
+                                {% endif %}
+                                {% if tenant.seats %}
+                                <tr>
+                                    <td><strong>Seats:</strong></td>
+                                    <td>{{ tenant.seats }} seat{{ 's' if tenant.seats != 1 else '' }}</td>
+                                </tr>
+                                {% endif %}
+                                {% if tenant.comments %}
+                                <tr>
+                                    <td><strong>Comments:</strong></td>
+                                    <td>{{ tenant.comments }}</td>
+                                </tr>
+                                {% endif %}
+                            </tbody>
+                        </table>
+                    </div>
+                    
+                    <div class="col-md-6">
+                        <h6><i class="fas fa-map-marker-alt"></i> Address Information</h6>
+                        <table class="table table-sm">
+                            <tbody>
+                                {% if tenant.addressLine1 %}
+                                <tr>
+                                    <td><strong>Address 1:</strong></td>
+                                    <td>{{ tenant.addressLine1 }}</td>
+                                </tr>
+                                {% endif %}
+                                {% if tenant.addressLine2 %}
+                                <tr>
+                                    <td><strong>Address 2:</strong></td>
+                                    <td>{{ tenant.addressLine2 }}</td>
+                                </tr>
+                                {% endif %}
+                                {% if tenant.city %}
+                                <tr>
+                                    <td><strong>City:</strong></td>
+                                    <td>{{ tenant.city }}</td>
+                                </tr>
+                                {% endif %}
+                                {% if tenant.state %}
+                                <tr>
+                                    <td><strong>State:</strong></td>
+                                    <td>{{ tenant.state }}</td>
+                                </tr>
+                                {% endif %}
+                                {% if tenant.zipCode %}
+                                <tr>
+                                    <td><strong>ZIP Code:</strong></td>
+                                    <td>{{ tenant.zipCode }}</td>
+                                </tr>
+                                {% endif %}
+                                {% if tenant.countryCode %}
+                                <tr>
+                                    <td><strong>Country:</strong></td>
+                                    <td>{{ tenant.countryCode }}</td>
+                                </tr>
+                                {% endif %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title mb-0">
+                    <i class="fas fa-users"></i> Administrative Contacts
+                </h5>
+            </div>
+            <div class="card-body">
+                {% if tenant.primaryAdminFirstName or tenant.primaryAdminLastName or tenant.primaryAdminEmail %}
+                <div class="mb-3">
+                    <h6>Primary Administrator</h6>
+                    {% if tenant.primaryAdminFirstName or tenant.primaryAdminLastName %}
+                    <p class="mb-1">
+                        <i class="fas fa-user"></i>
+                        {{ tenant.primaryAdminFirstName or '' }} {{ tenant.primaryAdminLastName or '' }}
+                    </p>
+                    {% endif %}
+                    {% if tenant.primaryAdminEmail %}
+                    <p class="mb-1">
+                        <i class="fas fa-envelope"></i>
+                        <a href="mailto:{{ tenant.primaryAdminEmail }}">{{ tenant.primaryAdminEmail }}</a>
+                    </p>
+                    {% endif %}
+                </div>
+                {% endif %}
+
+                {% if tenant.adminEmails or tenant.extraAdminEmails %}
+                <div class="mb-3">
+                    <h6>Additional Administrators</h6>
+                    {% set extra_emails = tenant.adminEmails or tenant.extraAdminEmails %}
+                    {% if extra_emails %}
+                        {% for email in extra_emails %}
+                        <p class="mb-1">
+                            <i class="fas fa-envelope"></i>
+                            <a href="mailto:{{ email }}">{{ email }}</a>
+                        </p>
+                        {% endfor %}
+                    {% else %}
+                        <p class="text-muted">No additional administrators</p>
+                    {% endif %}
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        {% if tenant.createdAt or tenant.updatedAt or tenant.expiresAt %}
+        <div class="card mt-3">
+            <div class="card-header">
+                <h5 class="card-title mb-0">
+                    <i class="fas fa-clock"></i> Timestamps
+                </h5>
+            </div>
+            <div class="card-body">
+                {% if tenant.createdAt %}
+                <p><strong>Created:</strong><br>
+                <small class="text-muted">{{ tenant.createdAt }}</small></p>
+                {% endif %}
+                {% if tenant.updatedAt %}
+                <p><strong>Updated:</strong><br>
+                <small class="text-muted">{{ tenant.updatedAt }}</small></p>
+                {% endif %}
+                {% if tenant.expiresAt %}
+                <p><strong>Expires:</strong><br>
+                <small class="text-muted">{{ tenant.expiresAt }}</small></p>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
+
+        <div class="card mt-3">
+            <div class="card-header">
+                <h5 class="card-title mb-0">
+                    <i class="fas fa-cog"></i> Actions
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="d-grid gap-2">
+                    <button type="button" class="btn btn-outline-info" onclick="exportTenantData()">
+                        <i class="fas fa-download"></i> Export JSON
+                    </button>
+                    <a href="{{ url_for('edit_tenant', tenant_id=tenant.id or tenant.organizationId or 'unknown') }}" class="btn btn-outline-warning">
+                        <i class="fas fa-edit"></i> Edit Tenant
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Raw JSON Data (Collapsible) -->
+<div class="row mt-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title mb-0">
+                    <button class="btn btn-link text-decoration-none p-0" type="button" 
+                            data-bs-toggle="collapse" data-bs-target="#rawDataCollapse">
+                        <i class="fas fa-code"></i> Raw JSON Data
+                        <i class="fas fa-chevron-down ms-2"></i>
+                    </button>
+                </h5>
+            </div>
+            <div class="collapse" id="rawDataCollapse">
+                <div class="card-body">
+                    <pre class="bg-light p-3 rounded" style="max-height: 400px; overflow-y: auto;"><code>{{ tenant | tojson(indent=2) }}</code></pre>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Delete Confirmation Form (Hidden) -->
+<form method="POST" id="deleteForm" style="display: none;">
+    <input type="hidden" name="tenant_id" value="{{ tenant.id or tenant.organizationId }}">
+</form>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Global functions for inline onclick usage
+window.deleteTenant = function(tenantId, tenantName) {
+    const confirmMessage = `Are you sure you want to delete "${tenantName}"?\n\nTenant ID: ${tenantId}\n\nThis action cannot be undone.`;
+    
+    if (confirm(confirmMessage)) {
+        const form = document.createElement('form');
+        form.method = 'POST';
+        form.action = `/tenant/${tenantId}/delete`;
+        document.body.appendChild(form);
+        form.submit();
+    }
+};
+
+window.exportTenantData = function() {
+    const tenantData = {{ tenant | tojson }};
+    const dataStr = JSON.stringify(tenantData, null, 2);
+    const dataBlob = new Blob([dataStr], {type: 'application/json'});
+    
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(dataBlob);
+    link.download = `tenant_${tenantData.id || tenantData.organizationId || 'unknown'}_${new Date().toISOString().slice(0,10)}.json`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+};
+
+// Expose functions globally
+deleteTenant = window.deleteTenant;
+exportTenantData = window.exportTenantData;
+
+function copyToClipboard(text) {
+    navigator.clipboard.writeText(text).then(function() {
+        // Show temporary success message
+        const button = event.target.closest('button');
+        const originalHTML = button.innerHTML;
+        button.innerHTML = '<i class="fas fa-check text-success"></i>';
+        setTimeout(() => {
+            button.innerHTML = originalHTML;
+        }, 1000);
+    }, function(err) {
+        console.error('Could not copy text: ', err);
+        alert('Failed to copy to clipboard');
+    });
+}
+
+// Auto-scroll to hash if present in URL
+document.addEventListener('DOMContentLoaded', function() {
+    if (window.location.hash) {
+        const element = document.querySelector(window.location.hash);
+        if (element) {
+            element.scrollIntoView();
+        }
+    }
+});
+</script>
+{% endblock %}

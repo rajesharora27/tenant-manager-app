@@ -1,0 +1,203 @@
+{% extends "base.html" %}
+
+{% block title %}Authenticate - SSE Tenant Manager{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h4 class="card-title mb-0">
+                    <i class="fas fa-key"></i> Authenticate with SSE API
+                </h4>
+            </div>
+            <div class="card-body">
+                <p class="text-muted">
+                    Authenticate with your Cisco SSE API credentials to access tenant management features.
+                    Your credentials are stored securely in environment variables.
+                </p>
+
+                <form method="POST">
+                    <div class="mb-3">
+                        <label for="BASE_URL" class="form-label">API Base URL</label>
+                        <input type="text" class="form-control" id="BASE_URL" name="BASE_URL" value="{{ config.BASE_URL }}" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="TOKEN_URL" class="form-label">Token URL</label>
+                        <input type="text" class="form-control" id="TOKEN_URL" name="TOKEN_URL" value="{{ config.TOKEN_URL }}" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="USERNAME" class="form-label">Username (Client ID)</label>
+                        <input type="text" class="form-control" id="USERNAME" name="USERNAME" value="{{ config.USERNAME }}" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="PASSWORD" class="form-label">Password (Client Secret)</label>
+                        <input type="password" class="form-control" id="PASSWORD" name="PASSWORD" value="" placeholder="Enter password" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="VERIFY_SSL" class="form-label">SSL Verification</label>
+                        <select class="form-select" id="VERIFY_SSL" name="VERIFY_SSL">
+                            <option value="true" {% if config.VERIFY_SSL == 'true' %}selected{% endif %}>Enabled</option>
+                            <option value="false" {% if config.VERIFY_SSL == 'false' %}selected{% endif %}>Disabled</option>
+                        </select>
+                    </div>
+                    <div class="d-grid">
+                        <button type="submit" class="btn btn-primary btn-lg">
+                            <i class="fas fa-key"></i> Authenticate Now
+                        </button>
+                    </div>
+                </form>
+
+                <hr>
+
+                <div class="row mt-4">
+                    <div class="col-12">
+                        <h6><i class="fas fa-info-circle"></i> Authentication Details</h6>
+                        <div class="table-responsive">
+                            <table class="table table-sm">
+                                <tbody>
+                                    <tr>
+                                        <td><strong>API Base URL:</strong></td>
+                                        <td><code>{{ config.BASE_URL }}</code></td>
+                                    </tr>
+                                    <tr>
+                                        <td><strong>Token URL:</strong></td>
+                                        <td><code>{{ config.TOKEN_URL }}</code></td>
+                                    </tr>
+                                    <tr>
+                                        <td><strong>Username:</strong></td>
+                                        <td><code>{{ config.USERNAME|string|truncate(12, True, '...') }}</code></td>
+                                    </tr>
+                                    <tr>
+                                        <td><strong>SSL Verification:</strong></td>
+                                        <td>
+                                            {% if config.VERIFY_SSL == 'true' %}
+                                                <span class="badge bg-success">Enabled</span>
+                                            {% else %}
+                                                <span class="badge bg-warning">Disabled</span>
+                                            {% endif %}
+                                        </td>
+                                    </tr>
+                                    <tr>
+                                        <td><strong>Grant Type:</strong></td>
+                                        <td><code>client_credentials</code></td>
+                                    </tr>
+                                    <tr>
+                                        <td><strong>Authentication:</strong></td>
+                                        <td><code>Basic Auth (OAuth 2.0)</code></td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="alert alert-warning mt-3">
+                    <h6><i class="fas fa-exclamation-triangle"></i> Configuration Required</h6>
+                    <p class="mb-2">Make sure your <code>.env</code> file contains:</p>
+                    <ul class="mb-0">
+                        <li><code>BASE_URL</code> - SSE API base URL</li>
+                        <li><code>USERNAME</code> - Your API client ID</li>
+                        <li><code>PASSWORD</code> - Your API client secret</li>
+                        <li><code>TOKEN_URL</code> - OAuth token endpoint</li>
+                    </ul>
+                </div>
+
+                <div class="text-center mt-4">
+                    <small class="text-muted">
+                        <i class="fas fa-shield-alt"></i> 
+                        Authentication tokens are automatically managed and renewed as needed.
+                    </small>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row justify-content-center mt-4">
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title mb-0">
+                    <i class="fas fa-question-circle"></i> Troubleshooting
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="accordion" id="troubleshootingAccordion">
+                    <div class="accordion-item">
+                        <h2 class="accordion-header" id="headingOne">
+                            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapseOne">
+                                <i class="fas fa-exclamation-circle text-danger me-2"></i>
+                                Authentication Failed (401 Unauthorized)
+                            </button>
+                        </h2>
+                        <div id="collapseOne" class="accordion-collapse collapse" data-bs-parent="#troubleshootingAccordion">
+                            <div class="accordion-body">
+                                <p><strong>Possible causes:</strong></p>
+                                <ul>
+                                    <li>Incorrect USERNAME or PASSWORD in .env file</li>
+                                    <li>API credentials have been revoked or expired</li>
+                                    <li>Wrong TOKEN_URL endpoint</li>
+                                </ul>
+                                <p><strong>Solutions:</strong></p>
+                                <ul>
+                                    <li>Verify your API credentials in the .env file</li>
+                                    <li>Check with your administrator for valid credentials</li>
+                                    <li>Ensure the TOKEN_URL is correct for your environment</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="accordion-item">
+                        <h2 class="accordion-header" id="headingTwo">
+                            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapseTwo">
+                                <i class="fas fa-network-wired text-warning me-2"></i>
+                                Connection Timeout or Network Error
+                            </button>
+                        </h2>
+                        <div id="collapseTwo" class="accordion-collapse collapse" data-bs-parent="#troubleshootingAccordion">
+                            <div class="accordion-body">
+                                <p><strong>Possible causes:</strong></p>
+                                <ul>
+                                    <li>Network connectivity issues</li>
+                                    <li>Firewall blocking the API endpoints</li>
+                                    <li>Incorrect BASE_URL or TOKEN_URL</li>
+                                </ul>
+                                <p><strong>Solutions:</strong></p>
+                                <ul>
+                                    <li>Check your internet connection</li>
+                                    <li>Verify the URLs are accessible from your network</li>
+                                    <li>Contact your network administrator about firewall rules</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="accordion-item">
+                        <h2 class="accordion-header" id="headingThree">
+                            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapseThree">
+                                <i class="fas fa-cog text-info me-2"></i>
+                                Environment Configuration
+                            </button>
+                        </h2>
+                        <div id="collapseThree" class="accordion-collapse collapse" data-bs-parent="#troubleshootingAccordion">
+                            <div class="accordion-body">
+                                <p><strong>Sample .env file:</strong></p>
+                                <pre class="bg-light p-3 rounded"><code>BASE_URL=https://api.sse.cisco.com/
+USERNAME=your-client-id-here
+PASSWORD=your-client-secret-here
+TOKEN_URL=https://api.sse.cisco.com/auth/v2/token
+SECRET_KEY=your-flask-secret-key</code></pre>
+                                <p class="mt-2">
+                                    <strong>Note:</strong> Replace the placeholder values with your actual SSE API credentials.
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

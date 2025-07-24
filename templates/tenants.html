@@ -1,0 +1,243 @@
+{% extends "base.html" %}
+
+{% block title %}All Tenants - SSE Tenant Manager{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <h2 class="mb-3">All Tenants</h2>
+    <div class="alert alert-info mb-3" role="alert">
+        <strong>Tip:</strong> Double-click any tenant row to view full details in a modal popup.
+    </div>
+    <form id="deleteTenantsForm" method="POST" action="{{ url_for('delete_multiple_tenants') }}">
+    <div class="row mb-3">
+        <div class="col-md-6">
+            <input type="text" id="tenantSearch" class="form-control" placeholder="Search by Name, ID, Seats, or Email...">
+        </div>
+        <div class="col-md-6 text-end">
+            <a href="{{ url_for('export_all_tenants') }}" class="btn btn-info me-2">
+                <i class="fas fa-download"></i> Export All
+            </a>
+            <button type="submit" class="btn btn-danger" id="deleteSelectedBtn" disabled>Delete Selected</button>
+        </div>
+    </div>
+    <div class="table-responsive">
+        <table class="table table-hover table-bordered" id="tenantsTable">
+            <thead class="table-light">
+                <tr>
+                    <th><input type="checkbox" id="selectAll"></th>
+                    <th>Name</th>
+                    <th>ID</th>
+                    <th>Seats</th>
+                    <th>Email</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for tenant in tenants %}
+                <tr class="tenant-row" data-tenant='{{ tenant | tojson | safe }}'>
+                    <td><input type="checkbox" name="tenant_ids" value="{{ tenant.id or tenant.organizationId }}" class="tenant-checkbox"></td>
+                    <td>{{ tenant.name }}</td>
+                    <td>{{ (tenant.id or tenant.organizationId)|string|truncate(12, True, '...') }}</td>
+                    <td>{{ tenant.seats }}</td>
+                    <td>{{ tenant.ADMIN_EMAIL if tenant.ADMIN_EMAIL else '' }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    </form>
+</div>
+
+<!-- Tenant Details Modal -->
+<div class="modal fade" id="tenantModal" tabindex="-1" aria-labelledby="tenantModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="tenantModalLabel">Tenant Details</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body" id="tenantModalBody">
+        <!-- Details will be injected by JS -->
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Global functions for inline onclick usage
+window.deleteTenant = function(tenantId, tenantName) {
+    const confirmMessage = `Are you sure you want to delete "${tenantName}"?\n\nTenant ID: ${tenantId}\n\nThis action cannot be undone.`;
+    if (confirm(confirmMessage)) {
+        const form = document.createElement('form');
+        form.method = 'POST';
+        form.action = `/tenant/${tenantId}/delete`;
+        document.body.appendChild(form);
+        form.submit();
+    }
+};
+
+window.exportTenantData = function(tenantId, tenantData = null) {
+    let tenant = tenantData;
+    
+    if (!tenant) {
+        const rows = document.querySelectorAll('.tenant-row');
+        for (const row of rows) {
+            try {
+                const data = JSON.parse(row.dataset.tenant);
+                if (data.id === tenantId || data.organizationId === tenantId ||
+                    String(data.id) === String(tenantId) || String(data.organizationId) === String(tenantId)) {
+                    tenant = data;
+                    break;
+                }
+            } catch (e) {
+                continue;
+            }
+        }
+    }
+    
+    if (!tenant) {
+        alert('Tenant not found. Please refresh the page and try again.');
+        return;
+    }
+    
+    try {
+        const dataStr = JSON.stringify(tenant, null, 2);
+        const dataBlob = new Blob([dataStr], {type: 'application/json'});
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(dataBlob);
+        link.download = `tenant_${tenant.id || tenant.organizationId || 'unknown'}_${new Date().toISOString().slice(0,10)}.json`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    } catch (e) {
+        alert('Export failed. Please try again.');
+    }
+};
+
+// Expose functions globally
+deleteTenant = window.deleteTenant;
+exportTenantData = window.exportTenantData;
+
+document.addEventListener('DOMContentLoaded', function() {
+    // Search functionality
+    const searchInput = document.getElementById('tenantSearch');
+    const table = document.getElementById('tenantsTable');
+    searchInput.addEventListener('input', function() {
+        const filter = this.value.toLowerCase();
+        for (const row of table.tBodies[0].rows) {
+            const name = row.cells[1].textContent.toLowerCase();
+            const id = row.cells[2].textContent.toLowerCase();
+            const seats = row.cells[3].textContent.toLowerCase();
+            const email = row.cells[4].textContent.toLowerCase();
+            row.style.display = (name.includes(filter) || id.includes(filter) || 
+                               seats.includes(filter) || email.includes(filter)) ? '' : 'none';
+        }
+    });
+
+    // Checkbox functionality
+    const selectAll = document.getElementById('selectAll');
+    const checkboxes = document.querySelectorAll('.tenant-checkbox');
+    const deleteBtn = document.getElementById('deleteSelectedBtn');
+    
+    selectAll.addEventListener('change', function() {
+        checkboxes.forEach(cb => { cb.checked = selectAll.checked; });
+        updateDeleteBtn();
+    });
+    
+    checkboxes.forEach(cb => {
+        cb.addEventListener('change', updateDeleteBtn);
+    });
+    
+    function updateDeleteBtn() {
+        const anyChecked = Array.from(checkboxes).some(cb => cb.checked);
+        deleteBtn.disabled = !anyChecked;
+    }
+
+    // Modal functionality
+    const modalEl = document.getElementById('tenantModal');
+    const modal = new bootstrap.Modal(modalEl);
+    
+    document.querySelectorAll('.tenant-row').forEach(row => {
+        row.addEventListener('dblclick', function() {
+            const tenant = JSON.parse(this.dataset.tenant);
+            
+            const labels = {
+                name: 'Name', id: 'ID', organizationId: 'Organization ID', seats: 'Seats',
+                comments: 'Comments', city: 'City', state: 'State', zipCode: 'Zip Code',
+                countryCode: 'Country', addressLine1: 'Address Line 1', addressLine2: 'Address Line 2',
+                adminDetails: 'Admin Details', primaryAdminEmail: 'Primary Admin Email',
+                primaryAdminFirstName: 'Primary Admin First Name', primaryAdminLastName: 'Primary Admin Last Name',
+                extraAdminEmails: 'Extra Admin Emails'
+            };
+            
+            let html = `<table class='table table-bordered'>`;
+            
+            function renderField(key, value) {
+                if (Array.isArray(value)) {
+                    value.forEach((item, idx) => {
+                        if (typeof item === 'object' && item !== null) {
+                            for (const [subKey, subValue] of Object.entries(item)) {
+                                renderField(`${labels[key] || key} ${idx+1} - ${labels[subKey] || subKey}`, subValue);
+                            }
+                        } else {
+                            renderField(`${labels[key] || key} ${idx+1}`, item);
+                        }
+                    });
+                } else if (typeof value === 'object' && value !== null) {
+                    for (const [subKey, subValue] of Object.entries(value)) {
+                        renderField(labels[subKey] || subKey, subValue);
+                    }
+                } else {
+                    html += `<tr><th>${labels[key] || key}</th><td>${value}</td></tr>`;
+                }
+            }
+            
+            for (const [key, value] of Object.entries(tenant)) {
+                renderField(key, value);
+            }
+            
+            html += `</table>`;
+            html += `<div class='mt-3 text-end'>
+                <a href='/tenant/${tenant.id || tenant.organizationId || 'unknown'}/edit' class='btn btn-warning me-2'>
+                    <i class='fas fa-edit'></i> Edit Tenant
+                </a>
+                <button type='button' class='btn btn-info me-2' data-action='export' data-tenant-id='${tenant.id || tenant.organizationId || 'unknown'}'>
+                    <i class='fas fa-download'></i> Export
+                </button>
+                <button type='button' class='btn btn-danger' data-action='delete' data-tenant-id='${tenant.id || tenant.organizationId || 'unknown'}' data-tenant-name='${tenant.name}'>
+                    <i class='fas fa-trash'></i> Delete
+                </button>
+            </div>`;
+            
+            const modalBody = document.getElementById('tenantModalBody');
+            modalBody.dataset.currentTenant = JSON.stringify(tenant);
+            modalBody.innerHTML = html;
+            
+            // Event delegation for modal buttons
+            modalBody.onclick = function(e) {
+                const button = e.target.closest('button');
+                if (!button) return;
+                
+                const action = button.getAttribute('data-action');
+                const tenantId = button.getAttribute('data-tenant-id');
+                
+                if (action === 'export') {
+                    try {
+                        const storedTenantData = JSON.parse(modalBody.dataset.currentTenant);
+                        window.exportTenantData(tenantId, storedTenantData);
+                    } catch (e) {
+                        window.exportTenantData(tenantId);
+                    }
+                } else if (action === 'delete') {
+                    const tenantName = button.getAttribute('data-tenant-name');
+                    window.deleteTenant(tenantId, tenantName);
+                }
+            };
+            
+            modal.show();
+        });
+    });
+});
+</script>
+{% endblock %}

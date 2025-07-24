@@ -1,0 +1,64 @@
+
+{% extends "base.html" %}
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-md-8">
+    <div class="card shadow-sm border-0 mt-4">
+      <div class="card-header bg-primary text-white">
+        <h3 class="mb-0">Edit Tenant</h3>
+      </div>
+      <div class="card-body">
+        <form method="POST" action="{{ url_for('edit_tenant', tenant_id=tenant_id or tenant.id or tenant.organizationId) }}">
+          <div class="row g-3">
+            <div class="col-md-6">
+              <label for="name" class="form-label">Tenant Name</label>
+              <input type="text" class="form-control" id="name" name="name" value="{{ tenant.name if tenant.name else defaults.name }}" required>
+            </div>
+            <div class="col-md-6">
+              <label for="seats" class="form-label">Seats</label>
+              <input type="number" class="form-control" id="seats" name="seats" value="{{ tenant.seats if tenant.seats else defaults.seats }}" min="1" required>
+            </div>
+            <div class="col-md-6">
+              <label for="addressLine1" class="form-label">Address Line 1</label>
+              <input type="text" class="form-control" id="addressLine1" name="addressLine1" value="{{ tenant.addressLine1 if tenant.addressLine1 else defaults.addressLine1 }}" required>
+            </div>
+            <div class="col-md-6">
+              <label for="addressLine2" class="form-label">Address Line 2</label>
+              <input type="text" class="form-control" id="addressLine2" name="addressLine2" value="{{ tenant.addressLine2 if tenant.addressLine2 else defaults.addressLine2 }}">
+            </div>
+            <div class="col-md-4">
+              <label for="city" class="form-label">City</label>
+              <input type="text" class="form-control" id="city" name="city" value="{{ tenant.city if tenant.city else defaults.city }}" required>
+            </div>
+            <div class="col-md-4">
+              <label for="state" class="form-label">State</label>
+              <input type="text" class="form-control" id="state" name="state" value="{{ tenant.state if tenant.state else defaults.state }}" required>
+            </div>
+            <div class="col-md-4">
+              <label for="zipCode" class="form-label">Zip Code</label>
+              <input type="text" class="form-control" id="zipCode" name="zipCode" value="{{ tenant.zipCode if tenant.zipCode else defaults.zipCode }}" required>
+            </div>
+            <div class="col-md-6">
+              <label for="countryCode" class="form-label">Country Code</label>
+              <input type="text" class="form-control" id="countryCode" name="countryCode" value="{{ tenant.countryCode if tenant.countryCode else defaults.countryCode }}" required>
+            </div>
+            <div class="col-md-6">
+              <label for="extraAdminEmails" class="form-label">Extra Admin Emails (comma separated)</label>
+              <input type="text" class="form-control" id="extraAdminEmails" name="extraAdminEmails"
+                value="{{ tenant.extraAdminEmails | render_extra_admin_emails if tenant.extraAdminEmails else defaults.extraAdminEmails | render_extra_admin_emails }}">
+            </div>
+            <div class="col-12">
+              <label for="comments" class="form-label">Comments</label>
+              <textarea class="form-control" id="comments" name="comments" rows="2">{{ tenant.comments if tenant.comments else defaults.comments }}</textarea>
+            </div>
+          </div>
+          <div class="mt-4 d-flex justify-content-end">
+            <button type="submit" class="btn btn-primary px-4">Update Tenant</button>
+            <a href="{{ url_for('tenant_detail', tenant_id=tenant_id) }}" class="btn btn-secondary ms-2">Cancel</a>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

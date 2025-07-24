@@ -1,0 +1,128 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - SSE Tenant Manager{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <div class="jumbotron bg-primary text-white p-5 rounded mb-4">
+            <h1 class="display-4">
+                <i class="fas fa-building"></i> SSE Tenant Manager
+            </h1>
+            <p class="lead">
+                Manage your Cisco SSE tenants with ease. Create, view, update, and delete tenants through a user-friendly web interface.
+            </p>
+            <hr class="my-4" style="border-color: rgba(255,255,255,0.3);">
+
+            <a class="btn btn-light btn-lg" href="{{ url_for('authenticate') }}" role="button">
+                <i class="fas fa-key"></i> Get Started
+            </a>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-3 mb-4">
+        <div class="card text-center h-100">
+            <div class="card-body">
+                <div class="mb-3">
+                    <i class="fas fa-key fa-3x text-primary"></i>
+                </div>
+                <h5 class="card-title">Authenticate</h5>
+                <p class="card-text">
+                    Authenticate with your SSE API credentials to access tenant management features.
+                </p>
+                <a href="{{ url_for('authenticate') }}" class="btn btn-primary">
+                    <i class="fas fa-key"></i> Authenticate
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-3 mb-4">
+        <div class="card text-center h-100">
+            <div class="card-body">
+                <div class="mb-3">
+                    <i class="fas fa-list fa-3x text-success"></i>
+                </div>
+                <h5 class="card-title">View Tenants</h5>
+                <p class="card-text">
+                    Browse and search through all your existing tenants with detailed information.
+                </p>
+                <a href="{{ url_for('list_tenants') }}" class="btn btn-success">
+                    <i class="fas fa-list"></i> View All
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-3 mb-4">
+        <div class="card text-center h-100">
+            <div class="card-body">
+                <div class="mb-3">
+                    <i class="fas fa-plus fa-3x text-info"></i>
+                </div>
+                <h5 class="card-title">Create Tenant</h5>
+                <p class="card-text">
+                    Create new tenants with comprehensive information and administrative details.
+                </p>
+                <a href="{{ url_for('create_tenant') }}" class="btn btn-info">
+                    <i class="fas fa-plus"></i> Create New
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row mt-5">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title mb-0">
+                    <i class="fas fa-info-circle"></i> Features Overview
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <h6><i class="fas fa-check-circle text-success"></i> Core Features</h6>
+                        <ul class="list-unstyled">
+                            <li><i class="fas fa-chevron-right text-primary"></i> OAuth 2.0 Authentication</li>
+                            <li><i class="fas fa-chevron-right text-primary"></i> List All Tenants</li>
+                            <li><i class="fas fa-chevron-right text-primary"></i> View Tenant Details</li>
+                            <li><i class="fas fa-chevron-right text-primary"></i> Create New Tenants</li>
+                            <li><i class="fas fa-chevron-right text-primary"></i> Delete Individual Tenants</li>
+                            <li><i class="fas fa-chevron-right text-primary"></i> Bulk Delete Operations</li>
+                        </ul>
+                    </div>
+                    <div class="col-md-6">
+                        <h6><i class="fas fa-shield-alt text-info"></i> Security & Reliability</h6>
+                        <ul class="list-unstyled">
+                            <li><i class="fas fa-chevron-right text-info"></i> Secure Token Management</li>
+                            <li><i class="fas fa-chevron-right text-info"></i> Automatic Token Renewal</li>
+                            <li><i class="fas fa-chevron-right text-info"></i> Session Management</li>
+                            <li><i class="fas fa-chevron-right text-info"></i> Error Handling & Logging</li>
+                            <li><i class="fas fa-chevron-right text-info"></i> Input Validation</li>
+                            <li><i class="fas fa-chevron-right text-info"></i> Environment Configuration</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row mt-4">
+    <div class="col-12">
+        <div class="alert alert-info">
+            <h6><i class="fas fa-lightbulb"></i> Getting Started</h6>
+            <ol class="mb-0">
+                <li>Click <strong>Authenticate</strong> to log in with your SSE API credentials</li>
+                <li>Use <strong>View All</strong> to see your existing tenants</li>
+                <li>Click <strong>Create New</strong> to add a new tenant</li>
+                <li>Select individual tenants to view details or perform operations</li>
+            </ol>
+        </div>
+    </div>
+</div>
+{% endblock %}

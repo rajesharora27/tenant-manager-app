@@ -1,0 +1,173 @@
+/* Custom styles for SSE Tenant Manager */
+
+/* Enhanced card animations */
+.tenant-card {
+    transition: all 0.3s ease;
+    border: 1px solid #dee2e6;
+}
+
+.tenant-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 8px 25px rgba(0,0,0,0.15);
+    border-color: #007bff;
+}
+
+/* Status badges */
+.status-badge {
+    font-weight: 600;
+    letter-spacing: 0.5px;
+}
+
+/* Navigation enhancements */
+.navbar-brand {
+    font-weight: 700;
+    font-size: 1.5rem;
+}
+
+.nav-link {
+    font-weight: 500;
+    transition: color 0.2s ease;
+}
+
+.nav-link:hover {
+    color: #007bff !important;
+}
+
+/* Form styling */
+.form-control:focus {
+    border-color: #007bff;
+    box-shadow: 0 0 0 0.2rem rgba(0,123,255,0.25);
+}
+
+.btn {
+    font-weight: 500;
+    transition: all 0.2s ease;
+}
+
+.btn:hover {
+    transform: translateY(-1px);
+}
+
+/* Alert positioning */
+.flash-messages {
+    z-index: 1060;
+}
+
+.flash-messages .alert {
+    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+    border: none;
+}
+
+/* Table styling */
+.table-sm td {
+    padding: 0.5rem;
+    vertical-align: middle;
+}
+
+/* Code blocks */
+pre {
+    border: 1px solid #e9ecef;
+    font-size: 0.875rem;
+}
+
+code {
+    color: #d63384;
+    background-color: #f8f9fa;
+    padding: 0.2em 0.4em;
+    border-radius: 0.25rem;
+    font-size: 0.875em;
+}
+
+/* Loading states */
+.btn:disabled {
+    opacity: 0.7;
+    cursor: not-allowed;
+}
+
+/* Search functionality */
+.search-highlight {
+    background-color: #fff3cd;
+    padding: 0.1em 0.2em;
+    border-radius: 0.2em;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+    .tenant-card {
+        margin-bottom: 1rem;
+    }
+    
+    .card-header .d-flex {
+        flex-direction: column;
+        align-items: flex-start !important;
+    }
+    
+    .card-header .badge {
+        margin-top: 0.5rem;
+    }
+    
+    .flash-messages {
+        position: relative;
+        top: 0;
+        right: 0;
+        margin-bottom: 1rem;
+    }
+}
+
+/* Dashboard enhancements */
+.jumbotron {
+    background: linear-gradient(135deg, #007bff 0%, #0056b3 100%);
+    border-radius: 0.5rem;
+}
+
+/* Icon colors */
+.text-primary { color: #007bff !important; }
+.text-success { color: #28a745 !important; }
+.text-info { color: #17a2b8 !important; }
+.text-warning { color: #ffc107 !important; }
+.text-danger { color: #dc3545 !important; }
+
+/* Footer styling */
+.footer {
+    background-color: #f8f9fa !important;
+    border-top: 2px solid #e9ecef;
+    margin-top: auto;
+}
+
+/* Utility classes */
+.cursor-pointer {
+    cursor: pointer;
+}
+
+.text-truncate-2 {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+/* Animation keyframes */
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(20px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.fade-in {
+    animation: fadeIn 0.5s ease-out;
+}
+
+/* Print styles */
+@media print {
+    .navbar, .footer, .btn, .flash-messages {
+        display: none !important;
+    }
+    
+    .card {
+        border: 1px solid #000 !important;
+        break-inside: avoid;
+    }
+    
+    .container {
+        max-width: 100% !important;
+    }
+}
