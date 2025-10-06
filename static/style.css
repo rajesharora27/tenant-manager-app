@@ -1,5 +1,60 @@
 /* Custom styles for SSE Tenant Manager */
 
+/* Professional Login Page Styling */
+.login-page {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    min-height: 100vh;
+}
+
+.login-card {
+    backdrop-filter: blur(10px);
+    background: rgba(255, 255, 255, 0.95);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.login-input-group .input-group-text {
+    background: #f8f9fa;
+    border-right: 0;
+    color: #6c757d;
+}
+
+.login-input-group .form-control {
+    border-left: 0;
+    padding-left: 0;
+    background: transparent;
+}
+
+.login-input-group .form-control:focus {
+    border-color: #007bff;
+    box-shadow: none;
+}
+
+.login-btn {
+    background: linear-gradient(135deg, #007bff 0%, #0056b3 100%);
+    border: none;
+    border-radius: 0.5rem;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+    transition: all 0.3s ease;
+}
+
+.login-btn:hover {
+    background: linear-gradient(135deg, #0056b3 0%, #004085 100%);
+    transform: translateY(-2px);
+    box-shadow: 0 8px 25px rgba(0, 123, 255, 0.3);
+}
+
+.login-logo {
+    color: #007bff;
+    animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+    0% { transform: scale(1); }
+    50% { transform: scale(1.05); }
+    100% { transform: scale(1); }
+}
+
 /* Enhanced card animations */
 .tenant-card {
     transition: all 0.3s ease;

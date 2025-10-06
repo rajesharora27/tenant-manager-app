@@ -10,13 +10,41 @@
                 <i class="fas fa-building"></i> SSE Tenant Manager
             </h1>
             <p class="lead">
-                Manage your Cisco SSE tenants with ease. Create, view, update, and delete tenants through a user-friendly web interface.
+                Manage your Cisco SSE tenants with ease. Multi-user platform with secure authentication and session management.
             </p>
+            {% if user_info.username %}
             <hr class="my-4" style="border-color: rgba(255,255,255,0.3);">
-
+            <div class="row">
+                <div class="col-md-6">
+                    <h5><i class="fas fa-user"></i> Welcome, {{ user_info.username }}!</h5>
+                    <p class="mb-1">
+                        <small><i class="fas fa-clock"></i> Authenticated: {{ user_info.auth_time }}</small>
+                    </p>
+                    {% if user_info.token_valid %}
+                    <p class="mb-0">
+                        <small><i class="fas fa-check-circle text-success"></i> Token Status: Valid</small>
+                    </p>
+                    {% else %}
+                    <p class="mb-0">
+                        <small><i class="fas fa-exclamation-circle text-warning"></i> Token Status: Invalid</small>
+                    </p>
+                    {% endif %}
+                </div>
+                <div class="col-md-6 text-end">
+                    <a class="btn btn-light" href="{{ url_for('list_tenants') }}" role="button">
+                        <i class="fas fa-list"></i> View Tenants
+                    </a>
+                    <a class="btn btn-outline-light ms-2" href="{{ url_for('logout') }}" role="button">
+                        <i class="fas fa-sign-out-alt"></i> Logout
+                    </a>
+                </div>
+            </div>
+            {% else %}
+            <hr class="my-4" style="border-color: rgba(255,255,255,0.3);">
             <a class="btn btn-light btn-lg" href="{{ url_for('authenticate') }}" role="button">
                 <i class="fas fa-key"></i> Get Started
             </a>
+            {% endif %}
         </div>
     </div>
 </div>
@@ -26,15 +54,35 @@
         <div class="card text-center h-100">
             <div class="card-body">
                 <div class="mb-3">
+                    {% if user_info.username %}
+                    <i class="fas fa-user-check fa-3x text-success"></i>
+                    {% else %}
                     <i class="fas fa-key fa-3x text-primary"></i>
+                    {% endif %}
                 </div>
-                <h5 class="card-title">Authenticate</h5>
+                <h5 class="card-title">
+                    {% if user_info.username %}
+                    Current User
+                    {% else %}
+                    Authenticate
+                    {% endif %}
+                </h5>
                 <p class="card-text">
-                    Authenticate with your SSE API credentials to access tenant management features.
+                    {% if user_info.username %}
+                    Logged in as {{ user_info.username }}. Multi-org access enabled.
+                    {% else %}
+                    Authenticate with your multiorg credentials to access tenant management features.
+                    {% endif %}
                 </p>
-                <a href="{{ url_for('authenticate') }}" class="btn btn-primary">
-                    <i class="fas fa-key"></i> Authenticate
+                {% if user_info.username %}
+                <a href="{{ url_for('logout') }}" class="btn btn-outline-primary">
+                    <i class="fas fa-sign-out-alt"></i> Switch User
                 </a>
+                {% else %}
+                <a href="{{ url_for('authenticate') }}" class="btn btn-primary">
+                    <i class="fas fa-key"></i> Sign In
+                </a>
+                {% endif %}
             </div>
         </div>
     </div>
@@ -87,23 +135,24 @@
                     <div class="col-md-6">
                         <h6><i class="fas fa-check-circle text-success"></i> Core Features</h6>
                         <ul class="list-unstyled">
-                            <li><i class="fas fa-chevron-right text-primary"></i> OAuth 2.0 Authentication</li>
+                            <li><i class="fas fa-chevron-right text-primary"></i> Multi-User Authentication</li>
+                            <li><i class="fas fa-chevron-right text-primary"></i> Multiorg User Support</li>
                             <li><i class="fas fa-chevron-right text-primary"></i> List All Tenants</li>
                             <li><i class="fas fa-chevron-right text-primary"></i> View Tenant Details</li>
                             <li><i class="fas fa-chevron-right text-primary"></i> Create New Tenants</li>
-                            <li><i class="fas fa-chevron-right text-primary"></i> Delete Individual Tenants</li>
-                            <li><i class="fas fa-chevron-right text-primary"></i> Bulk Delete Operations</li>
+                            <li><i class="fas fa-chevron-right text-primary"></i> Update Tenant Information</li>
+                            <li><i class="fas fa-chevron-right text-primary"></i> Delete Individual/Bulk Tenants</li>
                         </ul>
                     </div>
                     <div class="col-md-6">
-                        <h6><i class="fas fa-shield-alt text-info"></i> Security & Reliability</h6>
+                        <h6><i class="fas fa-shield-alt text-info"></i> Security & Multi-Tenancy</h6>
                         <ul class="list-unstyled">
-                            <li><i class="fas fa-chevron-right text-info"></i> Secure Token Management</li>
+                            <li><i class="fas fa-chevron-right text-info"></i> Per-User Token Management</li>
                             <li><i class="fas fa-chevron-right text-info"></i> Automatic Token Renewal</li>
-                            <li><i class="fas fa-chevron-right text-info"></i> Session Management</li>
-                            <li><i class="fas fa-chevron-right text-info"></i> Error Handling & Logging</li>
-                            <li><i class="fas fa-chevron-right text-info"></i> Input Validation</li>
-                            <li><i class="fas fa-chevron-right text-info"></i> Environment Configuration</li>
+                            <li><i class="fas fa-chevron-right text-info"></i> Isolated User Sessions</li>
+                            <li><i class="fas fa-chevron-right text-info"></i> Session Expiry Handling</li>
+                            <li><i class="fas fa-chevron-right text-info"></i> Organization-Specific Access</li>
+                            <li><i class="fas fa-chevron-right text-info"></i> Secure Credential Storage</li>
                         </ul>
                     </div>
                 </div>
@@ -117,10 +166,11 @@
         <div class="alert alert-info">
             <h6><i class="fas fa-lightbulb"></i> Getting Started</h6>
             <ol class="mb-0">
-                <li>Click <strong>Authenticate</strong> to log in with your SSE API credentials</li>
-                <li>Use <strong>View All</strong> to see your existing tenants</li>
-                <li>Click <strong>Create New</strong> to add a new tenant</li>
-                <li>Select individual tenants to view details or perform operations</li>
+                <li>Click <strong>Sign In</strong> to authenticate with your multiorg username and password</li>
+                <li>Use <strong>View Tenants</strong> to see your organization's existing tenants</li>
+                <li>Click <strong>Create New</strong> to add a new tenant to your organization</li>
+                <li>Each user sees only tenants from their organization</li>
+                <li>Session tokens are managed automatically and users are prompted to re-authenticate when needed</li>
             </ol>
         </div>
     </div>

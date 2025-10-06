@@ -25,6 +25,14 @@
                     <li class="nav-item"><a class="nav-link" href="{{ url_for('create_tenant') }}">Create Tenant</a></li>
                 </ul>
                 <ul class="navbar-nav">
+                    {% if session.multiorg_username %}
+                    <li class="nav-item me-3">
+                        <span class="navbar-text">
+                            <i class="fas fa-user"></i>
+                            {{ session.multiorg_username }}
+                        </span>
+                    </li>
+                    {% endif %}
                     <li class="nav-item me-3">
                         <span class="navbar-text" id="tokenStatus">
                             <i class="fas fa-circle text-secondary"></i>
@@ -83,11 +91,13 @@
                     // Show warning if less than 30 minutes remaining
                     if (expiresIn < 1800) {
                         statusIcon.className = 'fas fa-circle text-warning';
+                        statusText.textContent = `Token expires in ${timeDisplay}`;
                     }
                     
                     // Show critical if less than 5 minutes remaining
                     if (expiresIn < 300) {
                         statusIcon.className = 'fas fa-circle text-danger';
+                        statusText.textContent = `Token expires soon (${timeDisplay})`;
                     }
                 } else {
                     statusText.textContent = 'Token valid';

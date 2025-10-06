@@ -43,9 +43,19 @@
               <input type="text" class="form-control" id="countryCode" name="countryCode" value="{{ tenant.countryCode if tenant.countryCode else defaults.countryCode }}" required>
             </div>
             <div class="col-md-6">
-              <label for="extraAdminEmails" class="form-label">Extra Admin Emails (comma separated)</label>
-              <input type="text" class="form-control" id="extraAdminEmails" name="extraAdminEmails"
-                value="{{ tenant.extraAdminEmails | render_extra_admin_emails if tenant.extraAdminEmails else defaults.extraAdminEmails | render_extra_admin_emails }}">
+              <label for="adminDetails" class="form-label">Admin Emails</label>
+              <input type="text" class="form-control" id="adminDetails" name="adminDetails"
+                placeholder="admin1@example.com, admin2@example.com, admin3@example.com"
+                value="{{ tenant.adminDetails | render_admin_details if tenant.adminDetails else '' }}">
+              <div class="form-text">
+                {% if tenant.primaryAdminEmail %}
+                <strong>Current primary admin:</strong> {{ tenant.primaryAdminEmail }}<br>
+                {% endif %}
+                {% if tenant.adminDetails %}
+                <strong>Current admin details:</strong> {{ tenant.adminDetails | render_admin_details }}<br>
+                {% endif %}
+                <small>Enter admin emails (comma-separated). These will <strong>replace</strong> all current admin details. Primary admin can be overwritten if included in this list.</small>
+              </div>
             </div>
             <div class="col-12">
               <label for="comments" class="form-label">Comments</label>

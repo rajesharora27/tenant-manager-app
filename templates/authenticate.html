@@ -1,112 +1,108 @@
 {% extends "base.html" %}
 
-{% block title %}Authenticate - SSE Tenant Manager{% endblock %}
+{% block title %}Sign In - SSE Tenant Manager{% endblock %}
 
 {% block content %}
-<div class="row justify-content-center">
-    <div class="col-md-6">
-        <div class="card">
-            <div class="card-header">
-                <h4 class="card-title mb-0">
-                    <i class="fas fa-key"></i> Authenticate with SSE API
-                </h4>
-            </div>
-            <div class="card-body">
-                <p class="text-muted">
-                    Authenticate with your Cisco SSE API credentials to access tenant management features.
-                    Your credentials are stored securely in environment variables.
-                </p>
+<!-- Professional Login Page with Gradient Background -->
+<div class="login-page d-flex align-items-center justify-content-center">
+    <div class="container">
+        <div class="row justify-content-center">
+            <div class="col-md-5 col-lg-4 col-xl-3">
+                <!-- Main Login Card -->
+                <div class="card login-card shadow-lg border-0 fade-in">
+                    <div class="card-body p-5">
+                        <!-- Logo and Branding -->
+                        <div class="text-center mb-4">
+                            <div class="mb-3">
+                                <i class="fas fa-building login-logo fa-4x"></i>
+                            </div>
+                            <h1 class="h3 fw-bold text-dark mb-1">SSE Tenant Manager</h1>
+                            <p class="text-muted mb-0">Multi-Organization Platform</p>
+                        </div>
 
-                <form method="POST">
-                    <div class="mb-3">
-                        <label for="BASE_URL" class="form-label">API Base URL</label>
-                        <input type="text" class="form-control" id="BASE_URL" name="BASE_URL" value="{{ config.BASE_URL }}" required>
-                    </div>
-                    <div class="mb-3">
-                        <label for="TOKEN_URL" class="form-label">Token URL</label>
-                        <input type="text" class="form-control" id="TOKEN_URL" name="TOKEN_URL" value="{{ config.TOKEN_URL }}" required>
-                    </div>
-                    <div class="mb-3">
-                        <label for="USERNAME" class="form-label">Username (Client ID)</label>
-                        <input type="text" class="form-control" id="USERNAME" name="USERNAME" value="{{ config.USERNAME }}" required>
-                    </div>
-                    <div class="mb-3">
-                        <label for="PASSWORD" class="form-label">Password (Client Secret)</label>
-                        <input type="password" class="form-control" id="PASSWORD" name="PASSWORD" value="" placeholder="Enter password" required>
-                    </div>
-                    <div class="mb-3">
-                        <label for="VERIFY_SSL" class="form-label">SSL Verification</label>
-                        <select class="form-select" id="VERIFY_SSL" name="VERIFY_SSL">
-                            <option value="true" {% if config.VERIFY_SSL == 'true' %}selected{% endif %}>Enabled</option>
-                            <option value="false" {% if config.VERIFY_SSL == 'false' %}selected{% endif %}>Disabled</option>
-                        </select>
-                    </div>
-                    <div class="d-grid">
-                        <button type="submit" class="btn btn-primary btn-lg">
-                            <i class="fas fa-key"></i> Authenticate Now
-                        </button>
-                    </div>
-                </form>
+                        <!-- Login Form -->
+                        <form method="POST" class="needs-validation" novalidate>
+                            <!-- Username Field -->
+                            <div class="mb-3">
+                                <label for="username" class="form-label fw-semibold text-dark small">
+                                    MULTIORG USERNAME
+                                </label>
+                                <div class="input-group login-input-group">
+                                    <span class="input-group-text">
+                                        <i class="fas fa-user"></i>
+                                    </span>
+                                    <input type="text" class="form-control form-control-lg" 
+                                           id="username" name="username" 
+                                           placeholder="Enter username" 
+                                           required autofocus>
+                                </div>
+                            </div>
 
-                <hr>
+                            <!-- Password Field -->
+                            <div class="mb-4">
+                                <label for="password" class="form-label fw-semibold text-dark small">
+                                    PASSWORD
+                                </label>
+                                <div class="input-group login-input-group">
+                                    <span class="input-group-text">
+                                        <i class="fas fa-lock"></i>
+                                    </span>
+                                    <input type="password" class="form-control form-control-lg" 
+                                           id="password" name="password" 
+                                           placeholder="Enter password" 
+                                           required>
+                                </div>
+                            </div>
 
-                <div class="row mt-4">
-                    <div class="col-12">
-                        <h6><i class="fas fa-info-circle"></i> Authentication Details</h6>
-                        <div class="table-responsive">
-                            <table class="table table-sm">
-                                <tbody>
-                                    <tr>
-                                        <td><strong>API Base URL:</strong></td>
-                                        <td><code>{{ config.BASE_URL }}</code></td>
-                                    </tr>
-                                    <tr>
-                                        <td><strong>Token URL:</strong></td>
-                                        <td><code>{{ config.TOKEN_URL }}</code></td>
-                                    </tr>
-                                    <tr>
-                                        <td><strong>Username:</strong></td>
-                                        <td><code>{{ config.USERNAME|string|truncate(12, True, '...') }}</code></td>
-                                    </tr>
-                                    <tr>
-                                        <td><strong>SSL Verification:</strong></td>
-                                        <td>
-                                            {% if config.VERIFY_SSL == 'true' %}
-                                                <span class="badge bg-success">Enabled</span>
-                                            {% else %}
-                                                <span class="badge bg-warning">Disabled</span>
-                                            {% endif %}
-                                        </td>
-                                    </tr>
-                                    <tr>
-                                        <td><strong>Grant Type:</strong></td>
-                                        <td><code>client_credentials</code></td>
-                                    </tr>
-                                    <tr>
-                                        <td><strong>Authentication:</strong></td>
-                                        <td><code>Basic Auth (OAuth 2.0)</code></td>
-                                    </tr>
-                                </tbody>
-                            </table>
+                            <!-- Sign In Button -->
+                            <div class="d-grid">
+                                <button type="submit" class="btn login-btn btn-lg py-3" id="loginBtn">
+                                    <i class="fas fa-sign-in-alt me-2"></i>
+                                    SIGN IN
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+
+                    <!-- Card Footer -->
+                    <div class="card-footer bg-transparent text-center border-top-0 pt-0 pb-4">
+                        <small class="text-muted">
+                            <i class="fas fa-shield-alt me-1 text-success"></i>
+                            Secure OAuth 2.0 Authentication
+                        </small>
+                    </div>
+                </div>
+
+                <!-- Feature Highlights -->
+                <div class="text-center mt-4">
+                    <div class="card bg-white bg-opacity-90 border-0 shadow-sm">
+                        <div class="card-body py-4">
+                            <div class="row text-center">
+                                <div class="col-4">
+                                    <i class="fas fa-users fa-2x text-primary mb-2"></i>
+                                    <p class="small mb-0 fw-semibold">Multi-User</p>
+                                </div>
+                                <div class="col-4">
+                                    <i class="fas fa-shield-alt fa-2x text-success mb-2"></i>
+                                    <p class="small mb-0 fw-semibold">Secure</p>
+                                </div>
+                                <div class="col-4">
+                                    <i class="fas fa-sync-alt fa-2x text-info mb-2"></i>
+                                    <p class="small mb-0 fw-semibold">Auto-Sync</p>
+                                </div>
+                            </div>
+                            <hr class="my-3">
+                            <p class="text-muted small mb-0">
+                                Each organization maintains isolated access to their tenant data with automatic session management.
+                            </p>
                         </div>
                     </div>
                 </div>
 
-                <div class="alert alert-warning mt-3">
-                    <h6><i class="fas fa-exclamation-triangle"></i> Configuration Required</h6>
-                    <p class="mb-2">Make sure your <code>.env</code> file contains:</p>
-                    <ul class="mb-0">
-                        <li><code>BASE_URL</code> - SSE API base URL</li>
-                        <li><code>USERNAME</code> - Your API client ID</li>
-                        <li><code>PASSWORD</code> - Your API client secret</li>
-                        <li><code>TOKEN_URL</code> - OAuth token endpoint</li>
-                    </ul>
-                </div>
-
-                <div class="text-center mt-4">
-                    <small class="text-muted">
-                        <i class="fas fa-shield-alt"></i> 
-                        Authentication tokens are automatically managed and renewed as needed.
+                <!-- Help Link -->
+                <div class="text-center mt-3">
+                    <small class="text-white-50">
+                        Need assistance? Contact your system administrator
                     </small>
                 </div>
             </div>
@@ -114,90 +110,80 @@
     </div>
 </div>
 
-<div class="row justify-content-center mt-4">
-    <div class="col-md-8">
-        <div class="card">
-            <div class="card-header">
-                <h5 class="card-title mb-0">
-                    <i class="fas fa-question-circle"></i> Troubleshooting
-                </h5>
-            </div>
-            <div class="card-body">
-                <div class="accordion" id="troubleshootingAccordion">
-                    <div class="accordion-item">
-                        <h2 class="accordion-header" id="headingOne">
-                            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapseOne">
-                                <i class="fas fa-exclamation-circle text-danger me-2"></i>
-                                Authentication Failed (401 Unauthorized)
-                            </button>
-                        </h2>
-                        <div id="collapseOne" class="accordion-collapse collapse" data-bs-parent="#troubleshootingAccordion">
-                            <div class="accordion-body">
-                                <p><strong>Possible causes:</strong></p>
-                                <ul>
-                                    <li>Incorrect USERNAME or PASSWORD in .env file</li>
-                                    <li>API credentials have been revoked or expired</li>
-                                    <li>Wrong TOKEN_URL endpoint</li>
-                                </ul>
-                                <p><strong>Solutions:</strong></p>
-                                <ul>
-                                    <li>Verify your API credentials in the .env file</li>
-                                    <li>Check with your administrator for valid credentials</li>
-                                    <li>Ensure the TOKEN_URL is correct for your environment</li>
-                                </ul>
-                            </div>
-                        </div>
-                    </div>
+<style>
+/* Additional page-specific styles */
+body {
+    overflow: hidden;
+}
 
-                    <div class="accordion-item">
-                        <h2 class="accordion-header" id="headingTwo">
-                            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapseTwo">
-                                <i class="fas fa-network-wired text-warning me-2"></i>
-                                Connection Timeout or Network Error
-                            </button>
-                        </h2>
-                        <div id="collapseTwo" class="accordion-collapse collapse" data-bs-parent="#troubleshootingAccordion">
-                            <div class="accordion-body">
-                                <p><strong>Possible causes:</strong></p>
-                                <ul>
-                                    <li>Network connectivity issues</li>
-                                    <li>Firewall blocking the API endpoints</li>
-                                    <li>Incorrect BASE_URL or TOKEN_URL</li>
-                                </ul>
-                                <p><strong>Solutions:</strong></p>
-                                <ul>
-                                    <li>Check your internet connection</li>
-                                    <li>Verify the URLs are accessible from your network</li>
-                                    <li>Contact your network administrator about firewall rules</li>
-                                </ul>
-                            </div>
-                        </div>
-                    </div>
+.login-page {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    min-height: 100vh;
+    position: relative;
+}
 
-                    <div class="accordion-item">
-                        <h2 class="accordion-header" id="headingThree">
-                            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapseThree">
-                                <i class="fas fa-cog text-info me-2"></i>
-                                Environment Configuration
-                            </button>
-                        </h2>
-                        <div id="collapseThree" class="accordion-collapse collapse" data-bs-parent="#troubleshootingAccordion">
-                            <div class="accordion-body">
-                                <p><strong>Sample .env file:</strong></p>
-                                <pre class="bg-light p-3 rounded"><code>BASE_URL=https://api.sse.cisco.com/
-USERNAME=your-client-id-here
-PASSWORD=your-client-secret-here
-TOKEN_URL=https://api.sse.cisco.com/auth/v2/token
-SECRET_KEY=your-flask-secret-key</code></pre>
-                                <p class="mt-2">
-                                    <strong>Note:</strong> Replace the placeholder values with your actual SSE API credentials.
-                                </p>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-</div>
+.login-page::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1440 320"><path fill="%23ffffff" fill-opacity="0.1" d="M0,96L48,112C96,128,192,160,288,160C384,160,480,128,576,122.7C672,117,768,139,864,138.7C960,139,1056,117,1152,117.3C1248,117,1344,139,1392,149.3L1440,160L1440,320L1392,320C1344,320,1248,320,1152,320C1056,320,960,320,864,320C768,320,672,320,576,320C480,320,384,320,288,320C192,320,96,320,48,320L0,320Z"></path></svg>') bottom/cover no-repeat;
+}
+
+.login-card {
+    backdrop-filter: blur(10px);
+    background: rgba(255, 255, 255, 0.95) !important;
+    border-radius: 1rem !important;
+}
+
+.form-control:focus {
+    border-color: #007bff;
+    box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.15);
+}
+
+.login-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 25px rgba(0, 123, 255, 0.4);
+}
+
+/* Hide navigation for login page */
+.navbar {
+    display: none;
+}
+</style>
+
+<script>
+// Form validation and loading state
+document.addEventListener('DOMContentLoaded', function() {
+    const form = document.querySelector('.needs-validation');
+    const loginBtn = document.getElementById('loginBtn');
+    
+    form.addEventListener('submit', function(event) {
+        if (!form.checkValidity()) {
+            event.preventDefault();
+            event.stopPropagation();
+        } else {
+            // Show loading state
+            loginBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>SIGNING IN...';
+            loginBtn.disabled = true;
+        }
+        
+        form.classList.add('was-validated');
+    });
+    
+    // Add focus effects
+    const inputs = document.querySelectorAll('.form-control');
+    inputs.forEach(input => {
+        input.addEventListener('focus', function() {
+            this.parentElement.classList.add('focused');
+        });
+        
+        input.addEventListener('blur', function() {
+            this.parentElement.classList.remove('focused');
+        });
+    });
+});
+</script>
 {% endblock %}

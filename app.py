@@ -59,23 +59,36 @@ logger = logging.getLogger(__name__)
 def require_auth(f):
     """Decorator to require authentication for routes"""
     def decorated_function(*args, **kwargs):
-        if not session.get('authenticated'):
+        if not session.get('authenticated') or not session.get('multiorg_username'):
             logger.warning("Unauthenticated access attempt")
-            flash('Please authenticate first', 'warning')
+            flash('Please authenticate with your multiorg credentials', 'warning')
             return redirect(url_for('authenticate'))
+        
+        # Check if token is still valid, if not redirect to re-authenticate
+        if session.get('authenticated') and session.get('multiorg_username'):
+            api_client = get_user_api_client()
+            if api_client and not api_client.is_token_valid():
+                logger.warning("Token expired, requiring re-authentication")
+                session.pop('authenticated', None)
+                flash('Session expired. Please re-authenticate.', 'warning')
+                return redirect(url_for('authenticate'))
+        
         return f(*args, **kwargs)
     decorated_function.__name__ = f.__name__
     return decorated_function
 
 class SSEAPIClient:
-    """API Client for Cisco SSE Tenant Management"""
+    """API Client for Cisco SSE Tenant Management - Session-based multi-user support"""
     
-    def __init__(self):
+    def __init__(self, username=None, password=None):
+        # Configuration parameters from environment (don't change per user)
         self.base_url = os.getenv('BASE_URL', 'https://api.sse.cisco.com/')
-        self.username = os.getenv('USERNAME')
-        self.password = os.getenv('PASSWORD')
         self.token_url = os.getenv('TOKEN_URL', 'https://api.sse.cisco.com/auth/v2/token')
         self.verify_ssl = os.getenv('VERIFY_SSL', 'true').lower() == 'true'
+        
+        # User-specific credentials (multiorg username/password)
+        self.username = username
+        self.password = password
         self.access_token = None
         self.token_expires_at = None
         
@@ -224,26 +237,54 @@ class SSEAPIClient:
             return False, error_msg
     
     def update_tenant(self, tenant_id, tenant_data):
-        """Update existing tenant"""
+        """Update existing tenant - simplified to update all fields as provided"""
         try:
-            # Transform data for update API which has different field names
+            # Transform data for update API 
             update_data = {}
             
-            # Copy basic fields that are the same
-            for field in ['name', 'seats', 'comments', 'city', 'state', 'zipCode', 'countryCode', 'addressLine1', 'addressLine2']:
+            # Copy all fields directly from form data
+            for field in ['name', 'seats', 'comments', 'city', 'state', 'zipCode', 'addressLine1', 'addressLine2']:
                 if field in tenant_data:
                     update_data[field] = tenant_data[field]
             
-            # Transform admin email fields for update API
-            admin_emails = []
-            if 'primaryAdminEmail' in tenant_data:
-                admin_emails.append(tenant_data['primaryAdminEmail'])
-            if 'extraAdminEmails' in tenant_data:
-                admin_emails.extend(tenant_data['extraAdminEmails'])
+            # Handle countryCode with validation (must be exactly 2 characters)
+            if 'countryCode' in tenant_data:
+                country_code = tenant_data['countryCode'].strip()
+                if len(country_code) == 2:
+                    update_data['countryCode'] = country_code
+                else:
+                    logger.warning(f"Invalid country code length: {len(country_code)}, must be exactly 2 characters")
             
-            if admin_emails:
-                update_data['adminEmails'] = admin_emails
-            
+            # Handle adminDetails field - try different field names based on what API supports
+            if 'adminDetails' in tenant_data:
+                if tenant_data['adminDetails']:
+                    admin_details_array = []
+                    for admin in tenant_data['adminDetails']:
+                        if isinstance(admin, dict) and 'email' in admin:
+                            # Already in correct format
+                            if admin['email'].strip():
+                                admin_details_array.append({
+                                    'email': admin['email'].strip(),
+                                    'firstName': admin.get('firstName', '').strip(),
+                                    'lastName': admin.get('lastName', '').strip()
+                                })
+                        elif isinstance(admin, str) and admin.strip():
+                            # Convert email string to adminDetails object format
+                            admin_details_array.append({
+                                'email': admin.strip(),
+                                'firstName': '',
+                                'lastName': ''
+                            })
+                    
+                    # Try adminDetails first, then fall back to adminEmails, then extraAdminEmails
+                    admin_emails_list = [admin['email'] for admin in admin_details_array if admin['email']]
+                    update_data['adminDetails'] = admin_details_array
+                    logger.info(f"Updating adminDetails with: {admin_details_array}")
+                else:
+                    # Empty adminDetails
+                    update_data['adminDetails'] = []
+                    logger.info("Setting adminDetails to empty array")
+
             response = self._make_request('PUT', f'/admin/v2/tenants/{tenant_id}', json=update_data)
             
             if response.status_code == 200:
@@ -251,20 +292,48 @@ class SSEAPIClient:
                 logger.info(f"Successfully updated tenant {tenant_id}")
                 return True, tenant
             elif response.status_code == 400:
-                # Check if the error is about unsupported adminEmails field
+                # Check if the error is about unsupported adminDetails field
                 try:
                     error_detail = response.json()
-                    if 'adminEmails' in error_detail.get('message', ''):
-                        logger.warning(f"adminEmails field not supported for this org, retrying without it")
-                        # Remove adminEmails and try again
-                        update_data_without_emails = {k: v for k, v in update_data.items() if k != 'adminEmails'}
+                    error_message = error_detail.get('message', '')
+                    
+                    if 'adminDetails' in str(error_message):
+                        logger.warning(f"adminDetails field not supported for this org, trying adminEmails")
+                        # Remove adminDetails and try with adminEmails
+                        update_data_fallback = {k: v for k, v in update_data.items() if k != 'adminDetails'}
                         
-                        response = self._make_request('PUT', f'/admin/v2/tenants/{tenant_id}', json=update_data_without_emails)
+                        if 'adminDetails' in tenant_data and tenant_data['adminDetails']:
+                            # Convert to simple email list
+                            admin_emails_list = []
+                            for admin in tenant_data['adminDetails']:
+                                if isinstance(admin, dict) and 'email' in admin and admin['email'].strip():
+                                    admin_emails_list.append(admin['email'].strip())
+                                elif isinstance(admin, str) and admin.strip():
+                                    admin_emails_list.append(admin.strip())
+                            
+                            if admin_emails_list:
+                                update_data_fallback['adminEmails'] = admin_emails_list
+                        
+                        response = self._make_request('PUT', f'/admin/v2/tenants/{tenant_id}', json=update_data_fallback)
                         
                         if response.status_code == 200:
                             tenant = response.json()
-                            logger.info(f"Successfully updated tenant {tenant_id} (without adminEmails)")
+                            logger.info(f"Successfully updated tenant {tenant_id} (using adminEmails fallback)")
                             return True, tenant
+                        elif response.status_code == 400:
+                            # Try extraAdminEmails as final fallback
+                            logger.warning(f"adminEmails field not supported either, trying extraAdminEmails")
+                            update_data_fallback2 = {k: v for k, v in update_data_fallback.items() if k != 'adminEmails'}
+                            
+                            if admin_emails_list:
+                                update_data_fallback2['extraAdminEmails'] = admin_emails_list
+                            
+                            response = self._make_request('PUT', f'/admin/v2/tenants/{tenant_id}', json=update_data_fallback2)
+                            
+                            if response.status_code == 200:
+                                tenant = response.json()
+                                logger.info(f"Successfully updated tenant {tenant_id} (using extraAdminEmails fallback)")
+                                return True, tenant
                 except:
                     pass
                 
@@ -330,21 +399,58 @@ class SSEAPIClient:
             logger.error(error_msg)
             return False, error_msg
 
-# Initialize API client
-api_client = SSEAPIClient()
+# Session-based API clients (no global client)
+def get_user_api_client():
+    """Get API client for current user session"""
+    if not session.get('multiorg_username'):
+        return None
+    
+    # Create client with session credentials
+    client = SSEAPIClient(
+        username=session.get('multiorg_username'),
+        password=session.get('multiorg_password')
+    )
+    
+    # Restore token from session if available
+    if session.get('access_token') and session.get('token_expires_at'):
+        try:
+            client.access_token = session.get('access_token')
+            client.token_expires_at = datetime.fromisoformat(session.get('token_expires_at'))
+        except:
+            # Invalid token data in session, will re-authenticate
+            pass
+    
+    return client
+
+def save_user_session(client):
+    """Save API client token info to session"""
+    if client.access_token and client.token_expires_at:
+        session['access_token'] = client.access_token
+        session['token_expires_at'] = client.token_expires_at.isoformat()
+    else:
+        session.pop('access_token', None)
+        session.pop('token_expires_at', None)
 
 # Jinja2 filters
-def render_extra_admin_emails(value):
-    """Render extraAdminEmails as a comma-separated string"""
+def render_admin_details(value):
+    """Render adminDetails as a comma-separated string of emails"""
     if value is None:
         return ''
     if isinstance(value, list):
-        return ', '.join([str(e).strip() for e in value if str(e).strip()])
+        # Extract emails from adminDetails objects
+        emails = []
+        for admin in value:
+            if isinstance(admin, dict) and 'email' in admin:
+                if admin['email'].strip():
+                    emails.append(admin['email'].strip())
+            elif isinstance(admin, str) and admin.strip():
+                emails.append(admin.strip())
+        return ', '.join(emails)
     if isinstance(value, str):
         return value.strip()
     return str(value)
 
-app.jinja_env.filters['render_extra_admin_emails'] = render_extra_admin_emails
+app.jinja_env.filters['render_admin_details'] = render_admin_details
 
 @app.before_request
 def load_session():
@@ -357,42 +463,67 @@ def load_session():
 @require_auth
 def index():
     """Dashboard with overview"""
-    return render_template('index.html')
+    user_info = {
+        'username': session.get('multiorg_username'),
+        'auth_time': session.get('auth_time'),
+        'session_id': session.get('_id')
+    }
+    
+    # Get token info if available
+    api_client = get_user_api_client()
+    if api_client and api_client.token_expires_at:
+        user_info['token_expires_at'] = api_client.token_expires_at.isoformat()
+        user_info['token_valid'] = api_client.is_token_valid()
+    
+    return render_template('index.html', user_info=user_info)
 
 @app.route('/authenticate', methods=['GET', 'POST'])
 def authenticate():
-    """Authentication page"""
+    """Authentication page - Multi-org user authentication"""
+    # Configuration data (read-only, from environment)
     config_data = {
         'BASE_URL': os.getenv('BASE_URL', 'https://api.sse.cisco.com/'),
         'TOKEN_URL': os.getenv('TOKEN_URL', 'https://api.sse.cisco.com/auth/v2/token'),
-        'USERNAME': os.getenv('USERNAME', ''),
         'VERIFY_SSL': os.getenv('VERIFY_SSL', 'true')
     }
 
     if request.method == 'POST':
-        # Update environment with user input
-        for key in ['BASE_URL', 'TOKEN_URL', 'USERNAME', 'PASSWORD', 'VERIFY_SSL']:
-            value = request.form.get(key)
-            if value:
-                os.environ[key] = value
-                if key != 'PASSWORD':
-                    config_data[key] = value
+        # Get multiorg credentials from form
+        username = request.form.get('username', '').strip()
+        password = request.form.get('password', '').strip()
+        
+        if not username or not password:
+            flash('❌ Please provide both multiorg username and password', 'error')
+            return render_template('authenticate.html', config=config_data)
 
-        # Re-initialize API client
-        global api_client
-        api_client = SSEAPIClient()
+        # Create API client with user credentials
+        api_client = SSEAPIClient(username=username, password=password)
 
-        success, message = api_client.authenticate()
-        logger.info(f"Authentication result: success={success}")
+        try:
+            success, message = api_client.authenticate()
+            logger.info(f"Authentication result for user {username}: success={success}")
 
-        if success:
-            session.permanent = True
-            session['authenticated'] = True
-            session['auth_time'] = datetime.now().isoformat()
-            flash(f'✅ {message}', 'success')
-            return redirect(url_for('index'))
-        else:
-            flash(f'❌ {message}', 'error')
+            if success:
+                # Store user credentials and session info
+                session.permanent = True
+                session['authenticated'] = True
+                session['multiorg_username'] = username
+                session['multiorg_password'] = password  # Store encrypted in production
+                session['auth_time'] = datetime.now().isoformat()
+                session['user_display_name'] = username
+                
+                # Save token info to session
+                save_user_session(api_client)
+                
+                flash(f'✅ {message} (User: {username})', 'success')
+                return redirect(url_for('index'))
+            else:
+                flash(f'❌ {message}', 'error')
+                
+        except Exception as e:
+            error_msg = f"Authentication error: {str(e)}"
+            logger.error(error_msg)
+            flash(f'❌ {error_msg}', 'error')
 
     return render_template('authenticate.html', config=config_data)
 
@@ -400,7 +531,13 @@ def authenticate():
 @require_auth
 def list_tenants():
     """List all tenants"""
+    api_client = get_user_api_client()
+    if not api_client:
+        flash('❌ No API client available', 'error')
+        return redirect(url_for('authenticate'))
+    
     success, result = api_client.get_tenants()
+    save_user_session(api_client)  # Save any token updates
     
     if success:
         return render_template('tenants.html', tenants=result)
@@ -412,7 +549,13 @@ def list_tenants():
 @require_auth
 def tenant_detail(tenant_id):
     """Show tenant details"""
+    api_client = get_user_api_client()
+    if not api_client:
+        flash('❌ No API client available', 'error')
+        return redirect(url_for('authenticate'))
+    
     success, result = api_client.get_tenant(tenant_id)
+    save_user_session(api_client)  # Save any token updates
     
     if success:
         return render_template('tenant_detail.html', tenant=result)
@@ -425,6 +568,11 @@ def tenant_detail(tenant_id):
 def create_tenant():
     """Create new tenant"""
     if request.method == 'POST':
+        api_client = get_user_api_client()
+        if not api_client:
+            flash('❌ No API client available', 'error')
+            return redirect(url_for('authenticate'))
+        
         tenant_data = {
             'name': request.form.get('name'),
             'seats': int(request.form.get('seats', 0)),
@@ -443,12 +591,22 @@ def create_tenant():
         # Clean empty fields
         tenant_data = {k: v for k, v in tenant_data.items() if v}
         
-        # Handle extra admin emails
-        extra_emails = request.form.get('extraAdminEmails', '').strip()
-        if extra_emails:
-            tenant_data['extraAdminEmails'] = [email.strip() for email in extra_emails.split(',') if email.strip()]
+        # Handle admin details - convert email list to adminDetails format
+        admin_details = request.form.get('adminDetails', '').strip()
+        if admin_details:
+            admin_details_array = []
+            for email in admin_details.split(','):
+                email = email.strip()
+                if email:
+                    admin_details_array.append({
+                        'email': email,
+                        'firstName': '',
+                        'lastName': ''
+                    })
+            tenant_data['adminDetails'] = admin_details_array
         
         success, result = api_client.create_tenant(tenant_data)
+        save_user_session(api_client)  # Save any token updates
         
         if success:
             tenant_id = result.get('id', result.get('organizationId'))
@@ -471,7 +629,7 @@ def create_tenant():
         'primaryAdminEmail': os.getenv('ADMIN_EMAIL', ''),
         'primaryAdminFirstName': os.getenv('ADMIN_FIRSTNAME', ''),
         'primaryAdminLastName': os.getenv('ADMIN_LASTNAME', ''),
-        'extraAdminEmails': os.getenv('EXTRA_ADMIN_EMAILS', ''),
+        'adminDetails': os.getenv('ADMIN_DETAILS', ''),
     }
     
     return render_template('create_tenant.html', defaults=defaults)
@@ -480,6 +638,11 @@ def create_tenant():
 @require_auth
 def edit_tenant(tenant_id):
     """Edit existing tenant"""
+    api_client = get_user_api_client()
+    if not api_client:
+        flash('❌ No API client available', 'error')
+        return redirect(url_for('authenticate'))
+    
     if request.method == 'POST':
         tenant_data = {
             'name': request.form.get('name'),
@@ -491,20 +654,29 @@ def edit_tenant(tenant_id):
             'countryCode': request.form.get('countryCode', ''),
             'addressLine1': request.form.get('addressLine1', ''),
             'addressLine2': request.form.get('addressLine2', ''),
-            'primaryAdminEmail': request.form.get('primaryAdminEmail', ''),
-            'primaryAdminFirstName': request.form.get('primaryAdminFirstName', ''),
-            'primaryAdminLastName': request.form.get('primaryAdminLastName', ''),
+            # Note: primaryAdminEmail, primaryAdminFirstName, and primaryAdminLastName 
+            # are excluded from updates for security reasons
         }
         
         # Clean empty fields
         tenant_data = {k: v for k, v in tenant_data.items() if v}
         
-        # Handle extra admin emails
-        extra_emails = request.form.get('extraAdminEmails', '').strip()
-        if extra_emails:
-            tenant_data['extraAdminEmails'] = [email.strip() for email in extra_emails.split(',') if email.strip()]
+        # Handle admin details - convert email list to adminDetails format
+        admin_details = request.form.get('adminDetails', '').strip()
+        if admin_details:
+            admin_details_array = []
+            for email in admin_details.split(','):
+                email = email.strip()
+                if email:
+                    admin_details_array.append({
+                        'email': email,
+                        'firstName': '',
+                        'lastName': ''
+                    })
+            tenant_data['adminDetails'] = admin_details_array
         
         success, result = api_client.update_tenant(tenant_id, tenant_data)
+        save_user_session(api_client)  # Save any token updates
         
         if success:
             flash(f'✅ Tenant updated successfully!', 'success')
@@ -514,6 +686,7 @@ def edit_tenant(tenant_id):
     
     # GET request - fetch current tenant data
     success, tenant = api_client.get_tenant(tenant_id)
+    save_user_session(api_client)  # Save any token updates
     
     if success:
         # Prepare default values from environment variables (for fallbacks)
@@ -530,7 +703,7 @@ def edit_tenant(tenant_id):
             'primaryAdminEmail': os.getenv('ADMIN_EMAIL', ''),
             'primaryAdminFirstName': os.getenv('ADMIN_FIRSTNAME', ''),
             'primaryAdminLastName': os.getenv('ADMIN_LASTNAME', ''),
-            'extraAdminEmails': os.getenv('EXTRA_ADMIN_EMAILS', ''),
+            'adminDetails': os.getenv('ADMIN_DETAILS', ''),
         }
         
         return render_template('edit_tenant.html', tenant=tenant, tenant_id=tenant_id, defaults=defaults)
@@ -542,7 +715,13 @@ def edit_tenant(tenant_id):
 @require_auth
 def delete_tenant(tenant_id):
     """Delete single tenant"""
+    api_client = get_user_api_client()
+    if not api_client:
+        flash('❌ No API client available', 'error')
+        return redirect(url_for('authenticate'))
+    
     success, result = api_client.delete_tenant(tenant_id)
+    save_user_session(api_client)  # Save any token updates
     
     if success:
         flash(f'✅ {result}', 'success')
@@ -555,6 +734,11 @@ def delete_tenant(tenant_id):
 @require_auth
 def delete_multiple_tenants():
     """Delete multiple tenants"""
+    api_client = get_user_api_client()
+    if not api_client:
+        flash('❌ No API client available', 'error')
+        return redirect(url_for('authenticate'))
+    
     tenant_ids = request.form.getlist('tenant_ids')
     
     if not tenant_ids:
@@ -562,6 +746,7 @@ def delete_multiple_tenants():
         return redirect(url_for('list_tenants'))
     
     success, result = api_client.delete_multiple_tenants(tenant_ids)
+    save_user_session(api_client)  # Save any token updates
     
     if success:
         flash(f'✅ {result}', 'success')
@@ -575,6 +760,10 @@ def delete_multiple_tenants():
 def token_status():
     """API endpoint to check token validity and remaining time"""
     try:
+        api_client = get_user_api_client()
+        if not api_client:
+            return jsonify({'valid': False, 'error': 'No API client available'}), 400
+        
         is_valid = api_client.is_token_valid()
         
         expires_in = None
@@ -587,7 +776,8 @@ def token_status():
         return jsonify({
             'valid': is_valid,
             'expires_in': expires_in,
-            'expires_at': api_client.token_expires_at.isoformat() if api_client.token_expires_at else None
+            'expires_at': api_client.token_expires_at.isoformat() if api_client.token_expires_at else None,
+            'username': session.get('multiorg_username')
         })
     except Exception as e:
         logger.error(f"Error checking token status: {str(e)}")
@@ -597,7 +787,13 @@ def token_status():
 @require_auth
 def export_all_tenants():
     """Export all tenants as JSON"""
+    api_client = get_user_api_client()
+    if not api_client:
+        flash('❌ No API client available', 'error')
+        return redirect(url_for('authenticate'))
+    
     success, result = api_client.get_tenants()
+    save_user_session(api_client)  # Save any token updates
     
     if success:
         from flask import Response
@@ -611,7 +807,7 @@ def export_all_tenants():
             json_data,
             mimetype='application/json',
             headers={
-                'Content-Disposition': f'attachment; filename=all_tenants_{datetime.now().strftime("%Y%m%d_%H%M%S")}.json'
+                'Content-Disposition': f'attachment; filename=all_tenants_{session.get("multiorg_username", "user")}_{datetime.now().strftime("%Y%m%d_%H%M%S")}.json'
             }
         )
         return response
@@ -622,11 +818,10 @@ def export_all_tenants():
 @app.route('/logout')
 def logout():
     """Logout and clear session"""
+    username = session.get('multiorg_username', 'User')
     session.clear()
-    api_client.access_token = None
-    api_client.token_expires_at = None
-    flash('👋 Logged out successfully', 'info')
-    return redirect(url_for('index'))
+    flash(f'👋 Logged out successfully ({username})', 'info')
+    return redirect(url_for('authenticate'))
 
 @app.errorhandler(404)
 def not_found_error(error):

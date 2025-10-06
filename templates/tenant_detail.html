@@ -153,20 +153,18 @@
                 </div>
                 {% endif %}
 
-                {% if tenant.adminEmails or tenant.extraAdminEmails %}
+                {% if tenant.adminDetails %}
                 <div class="mb-3">
                     <h6>Additional Administrators</h6>
-                    {% set extra_emails = tenant.adminEmails or tenant.extraAdminEmails %}
-                    {% if extra_emails %}
-                        {% for email in extra_emails %}
+                    {% for admin in tenant.adminDetails %}
                         <p class="mb-1">
                             <i class="fas fa-envelope"></i>
-                            <a href="mailto:{{ email }}">{{ email }}</a>
+                            <a href="mailto:{{ admin.email if admin.email else admin }}">{{ admin.email if admin.email else admin }}</a>
+                            {% if admin.firstName or admin.lastName %}
+                                <small class="text-muted">({{ admin.firstName }} {{ admin.lastName }})</small>
+                            {% endif %}
                         </p>
-                        {% endfor %}
-                    {% else %}
-                        <p class="text-muted">No additional administrators</p>
-                    {% endif %}
+                    {% endfor %}
                 </div>
                 {% endif %}
             </div>

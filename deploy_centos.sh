@@ -1,0 +1,1314 @@
+#!/bin/bash
+
+# =============================================================================
+# CentOS Deployment Script for Tenant Manager App
+# =============================================================================
+# This script deploys the Flask Tenant Manager App on CentOS with Apache/Nginx
+# and makes it available at the /tenant-manager-app endpoint
+# 
+# Usage: sudo ./deploy_centos.sh [OPTIONS]
+# Options:
+#   --nginx      Use Nginx as web server
+#   --apache     Use Apache as web server (default)
+#   --domain     Set custom domain (default: localhost)
+#   --port       Set custom port (default: 80)
+#   --ssl        Enable SSL/HTTPS (requires certificates)
+#   --help       Show this help message
+# =============================================================================
+
+set -e  # Exit on any error
+
+# Default configuration
+WEB_SERVER="apache"
+DOMAIN="localhost"
+PORT="80"
+ENABLE_SSL="false"
+ENABLE_EXTERNAL_FLASK="false"
+APP_NAME="tenant-manager-app"
+APP_USER="tmapp"
+INSTALL_DIR="/opt/tenant-manager-app"
+SERVICE_NAME="tenant-manager-app"
+PYTHON_VERSION="3.9"
+
+# Colors for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m' # No Color
+
+# Logging function
+log() {
+    echo -e "${GREEN}[$(date +'%Y-%m-%d %H:%M:%S')] $1${NC}"
+}
+
+warning() {
+    echo -e "${YELLOW}[WARNING] $1${NC}"
+}
+
+error() {
+    echo -e "${RED}[ERROR] $1${NC}"
+    exit 1
+}
+
+info() {
+    echo -e "${BLUE}[INFO] $1${NC}"
+}
+
+# Parse command line arguments
+parse_args() {
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            --nginx)
+                WEB_SERVER="nginx"
+                shift
+                ;;
+            --apache)
+                WEB_SERVER="apache"
+                shift
+                ;;
+            --domain)
+                DOMAIN="$2"
+                shift 2
+                ;;
+            --port)
+                PORT="$2"
+                shift 2
+                ;;
+            --ssl)
+                ENABLE_SSL="true"
+                shift
+                ;;
+            --external)
+                ENABLE_EXTERNAL_FLASK="true"
+                shift
+                ;;
+            --help)
+                show_help
+                exit 0
+                ;;
+            *)
+                error "Unknown option: $1"
+                ;;
+        esac
+    done
+}
+
+show_help() {
+    cat << EOF
+CentOS Deployment Script for Tenant Manager App
+
+Usage: sudo ./deploy_centos.sh [OPTIONS]
+
+Options:
+  --nginx      Use Nginx as web server
+  --apache     Use Apache as web server (default)
+  --domain     Set custom domain (default: localhost)
+  --port       Set custom port (default: 80)
+  --ssl        Enable SSL/HTTPS (requires certificates)
+  --external   Allow Flask app to be accessed externally on port 5000 (SECURITY RISK)
+  --help       Show this help message
+
+Examples:
+  sudo ./deploy_centos.sh
+  sudo ./deploy_centos.sh --nginx --domain myapp.company.com
+  sudo ./deploy_centos.sh --apache --ssl --domain secure.company.com
+  sudo ./deploy_centos.sh --external  # WARNING: Exposes Flask on port 5000
+
+The app will be available at: http(s)://${DOMAIN}:${PORT}/tenant-manager-app
+EOF
+}
+
+# Check if running as root
+check_root() {
+    if [ "$EUID" -ne 0 ]; then
+        error "This script must be run as root (use sudo)"
+    fi
+}
+
+# Safety check to ensure we're not running from target directory
+check_source_safety() {
+    local current_dir="$(pwd)"
+    local script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    
+    # Prevent running from target installation directory
+    if [ "$script_dir" = "$INSTALL_DIR" ] || [ "$current_dir" = "$INSTALL_DIR" ]; then
+        error "Cannot run deployment script from target directory $INSTALL_DIR"
+        error "Please run this script from your development/source directory"
+    fi
+    
+    # Verify we have application files in source directory
+    if [ ! -f "$script_dir/app.py" ]; then
+        error "app.py not found in source directory $script_dir"
+        error "Please run this script from the directory containing your Flask application"
+    fi
+    
+    log "Source safety check passed - deploying from $script_dir to $INSTALL_DIR"
+}
+
+# Get CentOS version
+get_centos_version() {
+    if [ -f /etc/redhat-release ]; then
+        CENTOS_VERSION=$(grep -oE '[0-9]+' /etc/redhat-release | head -1)
+        log "Detected CentOS/RHEL version: $CENTOS_VERSION"
+    else
+        error "This script is designed for CentOS/RHEL systems"
+    fi
+}
+
+# Update system packages
+update_system() {
+    log "Updating system packages..."
+    if [ "$CENTOS_VERSION" -eq 8 ] || [ "$CENTOS_VERSION" -eq 9 ]; then
+        dnf update -y
+        dnf install -y epel-release
+    else
+        yum update -y
+        yum install -y epel-release
+    fi
+}
+
+# Install system dependencies
+install_dependencies() {
+    log "Installing system dependencies..."
+    
+    local packages="git curl wget unzip gcc openssl-devel bzip2-devel libffi-devel zlib-devel readline-devel sqlite-devel xz-devel"
+    
+    if [ "$CENTOS_VERSION" -eq 8 ] || [ "$CENTOS_VERSION" -eq 9 ]; then
+        dnf groupinstall -y "Development Tools"
+        dnf install -y $packages
+    else
+        yum groupinstall -y "Development Tools"
+        yum install -y $packages
+    fi
+}
+
+# Install Python 3.9+
+install_python() {
+    log "Installing Python $PYTHON_VERSION..."
+    
+    # Check if Python is already installed
+    if command -v python3.9 &> /dev/null; then
+        log "Python 3.9 is already installed"
+        return
+    fi
+    
+    if [ "$CENTOS_VERSION" -eq 8 ] || [ "$CENTOS_VERSION" -eq 9 ]; then
+        dnf install -y python39 python39-pip python39-devel
+    else
+        # For CentOS 7, compile from source
+        cd /tmp
+        wget https://www.python.org/ftp/python/3.9.18/Python-3.9.18.tgz
+        tar xzf Python-3.9.18.tgz
+        cd Python-3.9.18
+        ./configure --enable-optimizations
+        make altinstall
+        ln -sf /usr/local/bin/python3.9 /usr/bin/python3.9
+        ln -sf /usr/local/bin/pip3.9 /usr/bin/pip3.9
+    fi
+    
+    # Verify installation
+    python3.9 --version || error "Python installation failed"
+}
+
+# Create application user
+create_app_user() {
+    log "Creating application user: $APP_USER"
+    
+    if ! id "$APP_USER" &>/dev/null; then
+        useradd --system --shell /bin/bash --home-dir $INSTALL_DIR --create-home $APP_USER
+        log "User $APP_USER created"
+    else
+        log "User $APP_USER already exists"
+    fi
+}
+
+# Copy application files
+copy_application() {
+    log "Copying application files to $INSTALL_DIR..."
+    
+    # Create backup if directory exists
+    if [ -d "$INSTALL_DIR" ]; then
+        warning "Directory $INSTALL_DIR exists, creating backup..."
+        mv "$INSTALL_DIR" "${INSTALL_DIR}.backup.$(date +%Y%m%d_%H%M%S)"
+    fi
+    
+    # Create installation directory
+    mkdir -p "$INSTALL_DIR"
+    
+    # Get the directory where this script is located
+    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    
+    log "Creating new copy of application files from $SCRIPT_DIR"
+    
+    # Define application files to copy (selective copying to avoid deployment files)
+    declare -a APP_FILES=(
+        "app.py"
+        "wsgi.py" 
+        "wsgi_production.py"
+        "requirements.txt"
+        "static"
+        "templates"
+        ".env.template"
+        "README.md"
+        "run_waitress.py"
+    )
+    
+    # Copy each application file/directory if it exists
+    for item in "${APP_FILES[@]}"; do
+        if [ -e "$SCRIPT_DIR/$item" ]; then
+            log "Copying $item..."
+            cp -r "$SCRIPT_DIR/$item" "$INSTALL_DIR/"
+        else
+            warning "File/directory $item not found in source, skipping..."
+        fi
+    done
+    
+    # Create wsgi_production.py if it doesn't exist - handles URL prefix
+    if [ ! -f "$INSTALL_DIR/wsgi_production.py" ]; then
+        log "Creating wsgi_production.py for URL prefix handling..."
+        cat > "$INSTALL_DIR/wsgi_production.py" << 'EOF'
+#!/usr/bin/env python3
+"""
+Production WSGI configuration for Tenant Manager App
+Handles URL prefix /tenant-manager-app
+"""
+
+import os
+import sys
+
+# Add the application directory to Python path
+sys.path.insert(0, '/opt/tenant-manager-app')
+
+from app import app
+
+class PrefixMiddleware:
+    """
+    Middleware to handle URL prefix for deployment under /tenant-manager-app
+    """
+    def __init__(self, app, prefix=''):
+        self.app = app
+        self.prefix = prefix
+
+    def __call__(self, environ, start_response):
+        if environ['PATH_INFO'].startswith(self.prefix):
+            environ['PATH_INFO'] = environ['PATH_INFO'][len(self.prefix):]
+            environ['SCRIPT_NAME'] = self.prefix
+            return self.app(environ, start_response)
+        else:
+            start_response('404 Not Found', [('Content-Type', 'text/plain')])
+            return [b'Not Found']
+
+# Wrap the Flask app with prefix middleware
+application = PrefixMiddleware(app, '/tenant-manager-app')
+
+if __name__ == "__main__":
+    from werkzeug.serving import run_simple
+    run_simple('localhost', 5000, application, use_debugger=True, use_reloader=True)
+EOF
+    fi
+    
+    # Copy .env file if it exists (but don't overwrite if target already has one)
+    if [ -f "$SCRIPT_DIR/.env" ] && [ ! -f "$INSTALL_DIR/.env" ]; then
+        log "Copying existing .env file..."
+        cp "$SCRIPT_DIR/.env" "$INSTALL_DIR/"
+    fi
+    
+    # Remove any accidentally copied temporary/cache files
+    rm -rf "$INSTALL_DIR"/__pycache__ 2>/dev/null || true
+    rm -rf "$INSTALL_DIR"/flask_session/* 2>/dev/null || true
+    rm -f "$INSTALL_DIR"/app.log 2>/dev/null || true
+    rm -f "$INSTALL_DIR"/nohup.out 2>/dev/null || true
+    rm -f "$INSTALL_DIR"/*.bat 2>/dev/null || true
+    rm -f "$INSTALL_DIR"/*.ps1 2>/dev/null || true
+    
+    # Don't copy deployment-related files to avoid confusion
+    rm -f "$INSTALL_DIR"/deploy_centos.sh 2>/dev/null || true
+    rm -f "$INSTALL_DIR"/validate_deployment.sh 2>/dev/null || true
+    rm -f "$INSTALL_DIR"/nginx-*.conf 2>/dev/null || true
+    rm -f "$INSTALL_DIR"/apache-*.conf 2>/dev/null || true
+    rm -f "$INSTALL_DIR"/*.service 2>/dev/null || true
+    rm -f "$INSTALL_DIR"/CENTOS_DEPLOYMENT.md 2>/dev/null || true
+    rm -f "$INSTALL_DIR"/DEPLOYMENT_SUMMARY.md 2>/dev/null || true
+    
+    # Create necessary directories with proper structure
+    mkdir -p "$INSTALL_DIR/logs"
+    mkdir -p "$INSTALL_DIR/flask_session"
+    
+    # Ensure proper file permissions
+    find "$INSTALL_DIR" -type f -name "*.py" -exec chmod 644 {} \;
+    find "$INSTALL_DIR" -type f -name "*.sh" -exec chmod 755 {} \;
+    find "$INSTALL_DIR" -type d -exec chmod 755 {} \;
+    
+    # Set ownership to application user
+    chown -R $APP_USER:$APP_USER "$INSTALL_DIR"
+    
+    log "Application files copied successfully (deployment creates new copy, original files unchanged)"
+}
+
+# Setup Python virtual environment
+setup_python_env() {
+    log "Setting up Python virtual environment..."
+    
+    cd "$INSTALL_DIR"
+    
+    # Create virtual environment with explicit Python version
+    log "Creating virtual environment with Python 3.9..."
+    sudo -u $APP_USER python3.9 -m venv venv
+    
+    # Verify virtual environment was created successfully
+    if [ ! -f "$INSTALL_DIR/venv/bin/activate" ]; then
+        error "Failed to create virtual environment"
+    fi
+    
+    # Activate and install dependencies
+    log "Installing Python dependencies in virtual environment..."
+    sudo -u $APP_USER bash -c "
+        source venv/bin/activate
+        python --version
+        pip --version
+        pip install --upgrade pip setuptools wheel
+        
+        # Install requirements first
+        if [ -f requirements.txt ]; then
+            log 'Installing from requirements.txt...'
+            pip install -r requirements.txt
+        else
+            log 'No requirements.txt found, installing basic Flask dependencies...'
+            pip install flask requests python-dotenv
+        fi
+        
+        # Ensure Gunicorn is installed
+        log 'Installing Gunicorn WSGI server...'
+        pip install gunicorn
+        
+        # Verify Gunicorn executable exists
+        if [ ! -f venv/bin/gunicorn ]; then
+            error 'Gunicorn executable not found after installation!'
+        fi
+        
+        pip list
+    " || error "Failed to install Python dependencies"
+    
+    # Verify critical packages are installed
+    log "Verifying installation of critical packages..."
+    sudo -u $APP_USER bash -c "
+        source venv/bin/activate
+        python -c 'import flask; print(\"Flask version:\", flask.__version__)'
+        python -c 'import gunicorn; print(\"Gunicorn version:\", gunicorn.__version__)'
+        
+        # Verify Gunicorn executable
+        which gunicorn
+        ls -la venv/bin/gunicorn
+        
+        # Test basic imports that app.py might need
+        python -c 'import requests; print(\"Requests version:\", requests.__version__)' || echo 'Requests not available'
+        python -c 'import os; print(\"OS module available\")'
+        python -c 'from dotenv import load_dotenv; print(\"python-dotenv available\")' || echo 'python-dotenv not available'
+    " || error "Failed to verify package installation"
+    
+    log "Python virtual environment setup completed successfully"
+    log "Virtual environment location: $INSTALL_DIR/venv"
+    log "Python executable: $INSTALL_DIR/venv/bin/python"
+}
+
+# Create environment configuration
+create_env_config() {
+    log "Creating environment configuration..."
+    
+    # Create .env file if it doesn't exist
+    if [ ! -f "$INSTALL_DIR/.env" ]; then
+        cat > "$INSTALL_DIR/.env" << EOF
+# SSE Tenant Manager Configuration
+# Copy this template and customize for your environment
+
+# Required: SSE API Credentials
+USERNAME=your_sse_username_here
+PASSWORD=your_sse_password_here
+
+# API Configuration
+BASE_URL=https://api.sse.cisco.com/
+TOKEN_URL=https://api.sse.cisco.com/auth/v2/token
+VERIFY_SSL=true
+
+# Flask Configuration
+SECRET_KEY=$(openssl rand -hex 32)
+FLASK_ENV=production
+FLASK_DEBUG=False
+PORT=5000
+
+# Optional: Default form values
+TENANT_NAME=Your Company Name
+ADMIN_FIRSTNAME=Admin
+ADMIN_LASTNAME=User
+ADMIN_EMAIL=admin@yourcompany.com
+ADDRESS_LINE1=123 Main Street
+CITY=Your City
+STATE=Your State
+ZIPCODE=12345
+COUNTRY_CODE=US
+SEATS=100
+COMMENTS=Production tenant
+EOF
+        
+        chown $APP_USER:$APP_USER "$INSTALL_DIR/.env"
+        chmod 600 "$INSTALL_DIR/.env"
+        
+        warning "Created .env file at $INSTALL_DIR/.env"
+        warning "Please edit this file with your SSE API credentials!"
+    fi
+}
+
+# Create systemd service
+create_systemd_service() {
+    log "Creating systemd service..."
+    
+    # Verify Gunicorn executable exists before creating service
+    if [ ! -f "$INSTALL_DIR/venv/bin/gunicorn" ]; then
+        error "Gunicorn executable not found at $INSTALL_DIR/venv/bin/gunicorn - cannot create service"
+    fi
+    
+    log "Verified Gunicorn executable exists: $INSTALL_DIR/venv/bin/gunicorn"
+    
+    # Determine bind address based on external access setting
+    if [ "$ENABLE_EXTERNAL_FLASK" = "true" ]; then
+        FLASK_BIND_ADDRESS="0.0.0.0:5000"
+        warning "⚠️  SECURITY WARNING: Flask app will be accessible externally on port 5000!"
+        warning "⚠️  This is a security risk in production environments!"
+    else
+        FLASK_BIND_ADDRESS="127.0.0.1:5000"
+        log "Flask app will only be accessible locally (secure configuration)"
+    fi
+    
+    cat > "/etc/systemd/system/${SERVICE_NAME}.service" << EOF
+[Unit]
+Description=Tenant Manager App - Flask Web Application
+Documentation=file://$INSTALL_DIR/README.md
+After=network.target
+Wants=network.target
+
+[Service]
+Type=exec
+User=$APP_USER
+Group=$APP_USER
+WorkingDirectory=$INSTALL_DIR
+
+# Virtual Environment Configuration
+Environment=PATH=$INSTALL_DIR/venv/bin:/usr/local/bin:/usr/bin:/bin
+Environment=VIRTUAL_ENV=$INSTALL_DIR/venv
+Environment=PYTHONPATH=$INSTALL_DIR
+Environment=FLASK_ENV=production
+Environment=FLASK_DEBUG=False
+
+# Application Configuration
+EnvironmentFile=-$INSTALL_DIR/.env
+
+# Gunicorn WSGI Server Configuration - Use wsgi_production for URL prefix handling
+ExecStart=$INSTALL_DIR/venv/bin/python -m gunicorn \\
+    --bind $FLASK_BIND_ADDRESS \\
+    --workers 2 \\
+    --worker-class sync \\
+    --worker-connections 1000 \\
+    --max-requests 1000 \\
+    --max-requests-jitter 100 \\
+    --timeout 120 \\
+    --keep-alive 60 \\
+    --access-logfile $INSTALL_DIR/logs/access.log \\
+    --error-logfile $INSTALL_DIR/logs/error.log \\
+    --log-level debug \\
+    --capture-output \\
+    wsgi_production:application
+
+# Service Management
+ExecReload=/bin/kill -s HUP \$MAINPID
+ExecStop=/bin/kill -s TERM \$MAINPID
+KillMode=mixed
+TimeoutStopSec=30
+
+# Restart Policy
+Restart=always
+RestartSec=10
+StartLimitInterval=300
+StartLimitBurst=5
+
+# Security Settings
+NoNewPrivileges=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=$INSTALL_DIR/logs $INSTALL_DIR/flask_session
+PrivateTmp=true
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=$SERVICE_NAME
+
+# Resource Limits
+LimitNOFILE=65535
+LimitNPROC=4096
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+    # Enable service
+    systemctl daemon-reload
+    systemctl enable $SERVICE_NAME
+    
+    log "Systemd service created and enabled"
+    log "Service will run in isolated virtual environment: $INSTALL_DIR/venv"
+    log "Flask binding address: $FLASK_BIND_ADDRESS"
+    if [ "$ENABLE_EXTERNAL_FLASK" = "true" ]; then
+        warning "⚠️  Flask app will be accessible externally on port 5000!"
+    fi
+}
+
+# Install and configure Nginx
+setup_nginx() {
+    log "Installing and configuring Nginx..."
+    
+    if [ "$CENTOS_VERSION" -eq 8 ] || [ "$CENTOS_VERSION" -eq 9 ]; then
+        dnf install -y nginx
+    else
+        yum install -y nginx
+    fi
+    
+    # Create Nginx configuration
+    cat > "/etc/nginx/conf.d/${APP_NAME}.conf" << EOF
+server {
+    listen ${PORT};
+    server_name ${DOMAIN};
+    
+    # Security headers
+    add_header X-Frame-Options DENY;
+    add_header X-Content-Type-Options nosniff;
+    add_header X-XSS-Protection "1; mode=block";
+    add_header Strict-Transport-Security "max-age=31536000" always;
+    
+    # Logging
+    access_log /var/log/nginx/${APP_NAME}_access.log;
+    error_log /var/log/nginx/${APP_NAME}_error.log;
+    
+    # Main application location
+    location /${APP_NAME}/ {
+        proxy_pass http://127.0.0.1:5000/;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_redirect off;
+        
+        # Timeout settings
+        proxy_connect_timeout 60s;
+        proxy_send_timeout 60s;
+        proxy_read_timeout 60s;
+    }
+    
+    # Static files
+    location /${APP_NAME}/static/ {
+        alias ${INSTALL_DIR}/static/;
+        expires 1y;
+        add_header Cache-Control "public, immutable";
+    }
+    
+    # Health check
+    location /${APP_NAME}/health {
+        proxy_pass http://127.0.0.1:5000/;
+        access_log off;
+    }
+}
+EOF
+
+    # Test Nginx configuration
+    nginx -t || error "Nginx configuration test failed"
+    
+    # Enable and start Nginx
+    systemctl enable nginx
+    
+    log "Nginx configured successfully"
+}
+
+# Install and configure Apache
+setup_apache() {
+    log "Installing and configuring Apache..."
+    
+    if [ "$CENTOS_VERSION" -eq 8 ] || [ "$CENTOS_VERSION" -eq 9 ]; then
+        dnf install -y httpd mod_ssl
+    else
+        yum install -y httpd mod_ssl
+    fi
+    
+    # Create proper Apache configuration with explicit module loading
+    cat > "/etc/httpd/conf.d/${APP_NAME}.conf" << EOF
+# Tenant Manager App Configuration
+# Load required modules explicitly
+LoadModule proxy_module modules/mod_proxy.so
+LoadModule proxy_http_module modules/mod_proxy_http.so
+LoadModule headers_module modules/mod_headers.so
+LoadModule rewrite_module modules/mod_rewrite.so
+
+<VirtualHost *:${PORT}>
+    ServerName ${DOMAIN}
+    DocumentRoot /var/www/html
+    
+    # Security headers
+    Header always set X-Frame-Options DENY
+    Header always set X-Content-Type-Options nosniff
+    Header always set X-XSS-Protection "1; mode=block"
+    Header always set Strict-Transport-Security "max-age=31536000"
+    
+    # Logging with detailed information
+    CustomLog /var/log/httpd/${APP_NAME}_access.log combined
+    ErrorLog /var/log/httpd/${APP_NAME}_error.log
+    LogLevel info
+    
+    # Proxy configuration - proper order is critical
+    ProxyPreserveHost On
+    ProxyRequests Off
+    
+    # CRITICAL FIX: Use LocationMatch to prevent filesystem lookups
+    # This ensures Apache doesn't try to serve /tenant-manager-app as a directory
+    <LocationMatch "^/${APP_NAME}">
+        ProxyPass "http://127.0.0.1:5000"
+        ProxyPassReverse "http://127.0.0.1:5000"
+        
+        # Set proper headers for the proxied requests
+        RequestHeader set Host "%{HTTP_HOST}s"
+        RequestHeader set X-Real-IP "%{REMOTE_ADDR}s"
+        RequestHeader set X-Forwarded-For "%{REMOTE_ADDR}s"
+        RequestHeader set X-Forwarded-Proto "%{REQUEST_SCHEME}s"
+    </LocationMatch>
+    
+    # Optional: redirect root to application
+    RewriteEngine On
+    RewriteRule ^/$ /${APP_NAME}/ [R=302,L]
+    
+    # Static files - let Flask handle them to avoid conflicts
+    # Alias /${APP_NAME}/static ${INSTALL_DIR}/static
+    # <Directory "${INSTALL_DIR}/static">
+    #     Require all granted
+    #     ExpiresActive On
+    #     ExpiresDefault "access plus 1 year"
+    #     Header set Cache-Control "public, max-age=31536000"
+    # </Directory>
+    
+    # Security: deny direct access to application directory
+    <Directory "${INSTALL_DIR}">
+        Require all denied
+    </Directory>
+</VirtualHost>
+EOF
+
+    # Configure SELinux for Apache proxy connections
+    if [ "$CENTOS_VERSION" -eq 8 ] || [ "$CENTOS_VERSION" -eq 9 ]; then
+        # Enable required Apache modules and SELinux settings
+        setsebool -P httpd_can_network_connect 1 2>/dev/null || warning "Could not set SELinux boolean"
+        
+        # Allow Apache to connect to port 5000
+        if command -v semanage >/dev/null 2>&1; then
+            semanage port -a -t http_port_t -p tcp 5000 2>/dev/null || \
+            semanage port -m -t http_port_t -p tcp 5000 2>/dev/null || \
+            warning "Could not configure SELinux port policy"
+        fi
+    fi
+    
+    # Test Apache configuration
+    httpd -t || error "Apache configuration test failed"
+    
+    # Enable and start Apache
+    systemctl enable httpd
+    
+    log "Apache configured successfully with proxy support"
+}
+
+# Configure SSL if requested
+setup_ssl() {
+    if [ "$ENABLE_SSL" = "true" ]; then
+        log "Setting up SSL configuration..."
+        
+        # Create self-signed certificate if none exists
+        SSL_DIR="/etc/ssl/certs"
+        SSL_KEY_DIR="/etc/ssl/private"
+        
+        if [ ! -f "$SSL_DIR/${APP_NAME}.crt" ]; then
+            warning "Creating self-signed SSL certificate..."
+            openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+                -keyout "$SSL_KEY_DIR/${APP_NAME}.key" \
+                -out "$SSL_DIR/${APP_NAME}.crt" \
+                -subj "/C=US/ST=State/L=City/O=Organization/CN=${DOMAIN}"
+        fi
+        
+        if [ "$WEB_SERVER" = "nginx" ]; then
+            # Add SSL configuration to Nginx
+            sed -i "/listen ${PORT};/a\\    listen 443 ssl;\\n    ssl_certificate ${SSL_DIR}/${APP_NAME}.crt;\\n    ssl_certificate_key ${SSL_KEY_DIR}/${APP_NAME}.key;" "/etc/nginx/conf.d/${APP_NAME}.conf"
+        else
+            # Add SSL configuration to Apache
+            if [ "$CENTOS_VERSION" -eq 8 ] || [ "$CENTOS_VERSION" -eq 9 ]; then
+                dnf install -y mod_ssl
+            else
+                yum install -y mod_ssl
+            fi
+            
+            cat >> "/etc/httpd/conf.d/${APP_NAME}.conf" << EOF
+
+<VirtualHost *:443>
+    ServerName ${DOMAIN}
+    DocumentRoot ${INSTALL_DIR}
+    
+    SSLEngine on
+    SSLCertificateFile ${SSL_DIR}/${APP_NAME}.crt
+    SSLCertificateKeyFile ${SSL_KEY_DIR}/${APP_NAME}.key
+    
+    # Same configuration as HTTP
+    ProxyPreserveHost On
+    ProxyPass /${APP_NAME}/ http://127.0.0.1:5000/
+    ProxyPassReverse /${APP_NAME}/ http://127.0.0.1:5000/
+    
+    Alias /${APP_NAME}/static ${INSTALL_DIR}/static
+    <Directory "${INSTALL_DIR}/static">
+        Require all granted
+    </Directory>
+</VirtualHost>
+EOF
+        fi
+        
+        log "SSL configuration completed"
+    fi
+}
+
+# Configure firewall
+configure_firewall() {
+    log "Configuring firewall..."
+    
+    if systemctl is-active --quiet firewalld; then
+        firewall-cmd --permanent --add-port=${PORT}/tcp
+        
+        # Add port 5000 if external Flask access is enabled
+        if [ "$ENABLE_EXTERNAL_FLASK" = "true" ]; then
+            firewall-cmd --permanent --add-port=5000/tcp
+            warning "⚠️  Opened port 5000 in firewall for external Flask access!"
+        fi
+        
+        if [ "$ENABLE_SSL" = "true" ]; then
+            firewall-cmd --permanent --add-port=443/tcp
+        fi
+        firewall-cmd --reload
+        log "Firewall configured"
+    else
+        warning "Firewalld is not running, skipping firewall configuration"
+        if [ "$ENABLE_EXTERNAL_FLASK" = "true" ]; then
+            warning "⚠️  Port 5000 may need to be manually opened in your firewall!"
+        fi
+    fi
+}
+
+# Start services
+start_services() {
+    log "Starting services..."
+    
+    # Start web server first
+    if [ "$WEB_SERVER" = "nginx" ]; then
+        systemctl start nginx
+        if systemctl is-active --quiet nginx; then
+            log "Nginx web server started successfully"
+        else
+            error "Failed to start Nginx web server"
+        fi
+    else
+        systemctl start httpd
+        if systemctl is-active --quiet httpd; then
+            log "Apache web server started successfully"
+        else
+            error "Failed to start Apache web server"
+        fi
+    fi
+    
+    # Test application before starting service
+    log "Testing application before starting service..."
+    cd "$INSTALL_DIR"
+    
+    # Test Python import
+    if sudo -u $APP_USER $INSTALL_DIR/venv/bin/python -c "import app; print('App import successful')" 2>/dev/null; then
+        log "✅ Application import test passed"
+    else
+        warning "❌ Application import test failed - checking details..."
+        sudo -u $APP_USER $INSTALL_DIR/venv/bin/python -c "import app" || true
+    fi
+    
+    # Start application service
+    log "Starting application service..."
+    systemctl start $SERVICE_NAME
+    
+    # Wait a moment for service to initialize
+    sleep 3
+    
+    # Check service status
+    if systemctl is-active --quiet $SERVICE_NAME; then
+        log "Application service started successfully"
+        
+        # Test if application is responding
+        sleep 2
+        if curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:5000/ | grep -q "200\|302\|404"; then
+            log "✅ Application is responding on port 5000"
+        else
+            warning "⚠️ Application may not be responding properly on port 5000"
+        fi
+    else
+        error "❌ Failed to start application service"
+        warning "Service failed to start. Running diagnostics..."
+        warning "Run this command to diagnose: cd $INSTALL_DIR && ./diagnose.sh"
+        warning "Check logs with: journalctl -u $SERVICE_NAME -n 50"
+        
+        # Show recent logs for immediate troubleshooting
+        echo "Recent service logs:"
+        journalctl -u $SERVICE_NAME -n 10 --no-pager || true
+        
+        exit 1
+    fi
+}
+
+# Create management scripts
+create_management_scripts() {
+    log "Creating enhanced management scripts..."
+    
+    # Create comprehensive management script
+    cat > "${INSTALL_DIR}/manage.sh" << 'EOF'
+#!/bin/bash
+# Comprehensive management script for Tenant Manager App
+# Usage: ./manage.sh {start|stop|restart|status}
+
+APP_NAME="tenant-manager-app"
+SERVICE_NAME="tenant-manager-app"
+WEB_SERVICE=""
+
+# Colors for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m'
+
+log_info() { echo -e "${GREEN}[INFO]${NC} $1"; }
+log_warning() { echo -e "${YELLOW}[WARNING]${NC} $1"; }
+log_error() { echo -e "${RED}[ERROR]${NC} $1"; }
+log_status() { echo -e "${BLUE}[STATUS]${NC} $1"; }
+
+# Detect web server
+detect_web_server() {
+    if systemctl is-active --quiet httpd; then
+        WEB_SERVICE="httpd"
+    elif systemctl is-active --quiet nginx; then
+        WEB_SERVICE="nginx"
+    elif systemctl list-unit-files | grep -q httpd; then
+        WEB_SERVICE="httpd"
+    elif systemctl list-unit-files | grep -q nginx; then
+        WEB_SERVICE="nginx"
+    fi
+}
+
+# Start function
+start_app() {
+    detect_web_server
+    log_info "Starting $APP_NAME..."
+    
+    if systemctl is-active --quiet $SERVICE_NAME; then
+        log_warning "$APP_NAME is already running"
+        return 1
+    fi
+    
+    systemctl start $SERVICE_NAME
+    if [ ! -z "$WEB_SERVICE" ]; then
+        systemctl start $WEB_SERVICE
+    fi
+    
+    sleep 2
+    if systemctl is-active --quiet $SERVICE_NAME; then
+        log_info "$APP_NAME started successfully"
+        systemctl status $SERVICE_NAME --no-pager -l
+        return 0
+    else
+        log_error "Failed to start $APP_NAME"
+        return 1
+    fi
+}
+
+# Stop function
+stop_app() {
+    log_info "Stopping $APP_NAME..."
+    if ! systemctl is-active --quiet $SERVICE_NAME; then
+        log_warning "$APP_NAME is not running"
+        return 1
+    fi
+    
+    systemctl stop $SERVICE_NAME
+    if systemctl is-active --quiet $SERVICE_NAME; then
+        log_error "Failed to stop $APP_NAME"
+        return 1
+    else
+        log_info "$APP_NAME stopped successfully"
+        return 0
+    fi
+}
+
+# Restart function
+restart_app() {
+    detect_web_server
+    log_info "Restarting $APP_NAME..."
+    systemctl restart $SERVICE_NAME
+    if [ ! -z "$WEB_SERVICE" ]; then
+        systemctl reload $WEB_SERVICE
+    fi
+    
+    sleep 2
+    if systemctl is-active --quiet $SERVICE_NAME; then
+        log_info "$APP_NAME restarted successfully"
+        systemctl status $SERVICE_NAME --no-pager -l
+        return 0
+    else
+        log_error "Failed to restart $APP_NAME"
+        return 1
+    fi
+}
+
+# Status function
+status_app() {
+    detect_web_server
+    log_status "=== Service Status ==="
+    systemctl status $SERVICE_NAME --no-pager -l
+    
+    echo ""
+    log_status "=== Web Server Status ==="
+    if [ ! -z "$WEB_SERVICE" ]; then
+        systemctl status $WEB_SERVICE --no-pager
+    else
+        echo "No web server detected"
+    fi
+    
+    echo ""
+    log_status "=== Application URLs ==="
+    if systemctl is-active --quiet $SERVICE_NAME; then
+        if [ ! -z "$WEB_SERVICE" ]; then
+            echo "Web Interface: http://localhost/tenant-manager-app"
+            echo "Direct Access: http://localhost:5000"
+        else
+            echo "Direct Access: http://localhost:5000"
+        fi
+    else
+        echo "Application is not running"
+    fi
+}
+
+# Main script logic
+case "$1" in
+    start) start_app ;;
+    stop) stop_app ;;
+    restart) restart_app ;;
+    status) status_app ;;
+    *)
+        echo "Usage: $0 {start|stop|restart|status}"
+        echo "Commands:"
+        echo "  start   - Start the application and web server"
+        echo "  stop    - Stop the application"
+        echo "  restart - Restart the application and reload web server"
+        echo "  status  - Show comprehensive application status"
+        exit 1
+        ;;
+esac
+exit $?
+EOF
+    
+    # Create start script
+    cat > "${INSTALL_DIR}/start.sh" << 'EOF'
+#!/bin/bash
+echo "Starting Tenant Manager App..."
+systemctl start tenant-manager-app
+systemctl start httpd  # or nginx for nginx
+echo "Tenant Manager App started"
+systemctl status tenant-manager-app --no-pager -l
+EOF
+    
+    # Create stop script
+    cat > "${INSTALL_DIR}/stop.sh" << 'EOF'
+#!/bin/bash
+echo "Stopping Tenant Manager App..."
+systemctl stop tenant-manager-app
+echo "Tenant Manager App stopped"
+EOF
+    
+    # Create restart script
+    cat > "${INSTALL_DIR}/restart.sh" << 'EOF'
+#!/bin/bash
+echo "Restarting Tenant Manager App..."
+systemctl restart tenant-manager-app
+systemctl reload httpd  # or nginx for nginx
+echo "Tenant Manager App restarted"
+systemctl status tenant-manager-app --no-pager -l
+EOF
+    
+    # Create status script
+    cat > "${INSTALL_DIR}/status.sh" << 'EOF'
+#!/bin/bash
+echo "=== Service Status ==="
+systemctl status tenant-manager-app --no-pager -l
+echo ""
+echo "=== Web Server Status ==="
+if systemctl is-active --quiet httpd; then
+    systemctl status httpd --no-pager
+elif systemctl is-active --quiet nginx; then
+    systemctl status nginx --no-pager
+fi
+echo ""
+echo "=== Python Virtual Environment ==="
+echo "Virtual Environment: /opt/tenant-manager-app/venv"
+echo "Python Version: $(/opt/tenant-manager-app/venv/bin/python --version)"
+echo "Pip Packages:"
+/opt/tenant-manager-app/venv/bin/pip list | head -10
+echo ""
+echo "=== Application Logs (last 20 lines) ==="
+journalctl -u tenant-manager-app -n 20 --no-pager
+EOF
+    
+    # Create update script
+    cat > "${INSTALL_DIR}/update.sh" << 'EOF'
+#!/bin/bash
+echo "Updating Tenant Manager App..."
+cd /opt/tenant-manager-app
+
+# Update from git if available
+if [ -d ".git" ]; then
+    echo "Pulling latest changes from git..."
+    git pull
+fi
+
+# Update Python dependencies in virtual environment
+echo "Updating Python dependencies in virtual environment..."
+source venv/bin/activate
+pip install --upgrade pip
+pip install -r requirements.txt
+pip install --upgrade gunicorn
+
+# Restart the application
+echo "Restarting application service..."
+systemctl restart tenant-manager-app
+
+echo "Application updated and restarted successfully!"
+systemctl status tenant-manager-app --no-pager -l
+EOF
+    
+    # Create environment info script
+    cat > "${INSTALL_DIR}/env_info.sh" << 'EOF'
+#!/bin/bash
+echo "=== Tenant Manager App Environment Information ==="
+echo ""
+echo "Application Directory: /opt/tenant-manager-app"
+echo "Virtual Environment: /opt/tenant-manager-app/venv"
+echo "Service User: tmapp"
+echo ""
+echo "=== Python Environment ==="
+echo "Python Executable: $(/opt/tenant-manager-app/venv/bin/python --version)"
+echo "Pip Version: $(/opt/tenant-manager-app/venv/bin/pip --version)"
+echo ""
+echo "=== Installed Packages ==="
+/opt/tenant-manager-app/venv/bin/pip list
+echo ""
+echo "=== Service Configuration ==="
+systemctl cat tenant-manager-app
+EOF
+
+    # Create diagnostic script
+    cat > "${INSTALL_DIR}/diagnose.sh" << 'EOF'
+#!/bin/bash
+echo "=== Tenant Manager App Diagnostic Tool ==="
+echo ""
+
+echo "=== File Permissions ==="
+ls -la /opt/tenant-manager-app/
+echo ""
+
+echo "=== Python Test ==="
+cd /opt/tenant-manager-app
+sudo -u tmapp /opt/tenant-manager-app/venv/bin/python --version
+echo ""
+
+echo "=== Flask Import Test ==="
+cd /opt/tenant-manager-app
+sudo -u tmapp /opt/tenant-manager-app/venv/bin/python -c "import flask; print('Flask OK')"
+echo ""
+
+echo "=== App Import Test ==="
+cd /opt/tenant-manager-app
+sudo -u tmapp /opt/tenant-manager-app/venv/bin/python -c "
+try:
+    import app
+    print('✅ app.py imports successfully')
+    print('✅ Flask app object:', type(app.app))
+except Exception as e:
+    print('❌ Failed to import app.py:', e)
+"
+echo ""
+
+echo "=== Gunicorn Test ==="
+cd /opt/tenant-manager-app
+echo "Checking Gunicorn executable:"
+ls -la /opt/tenant-manager-app/venv/bin/gunicorn 2>/dev/null || echo "❌ Gunicorn executable missing!"
+
+echo "Checking Gunicorn import:"
+sudo -u tmapp /opt/tenant-manager-app/venv/bin/python -c "
+try:
+    import gunicorn
+    print('✅ Gunicorn available:', gunicorn.__version__)
+except Exception as e:
+    print('❌ Gunicorn import failed:', e)
+"
+
+echo "Checking if gunicorn command works:"
+sudo -u tmapp /opt/tenant-manager-app/venv/bin/gunicorn --version 2>/dev/null || echo "❌ Gunicorn command failed"
+echo ""
+
+echo "=== Manual Gunicorn Test (5 seconds) ==="
+cd /opt/tenant-manager-app
+timeout 5 sudo -u tmapp /opt/tenant-manager-app/venv/bin/gunicorn --bind 127.0.0.1:5001 --timeout 5 app:app || echo "Manual test completed"
+echo ""
+
+echo "=== Environment File Check ==="
+if [ -f /opt/tenant-manager-app/.env ]; then
+    echo "✅ .env file exists"
+    echo "File size: $(stat -c%s /opt/tenant-manager-app/.env) bytes"
+    echo "Permissions: $(stat -c%a /opt/tenant-manager-app/.env)"
+    echo "Owner: $(stat -c%U:%G /opt/tenant-manager-app/.env)"
+else
+    echo "❌ .env file missing"
+fi
+echo ""
+
+echo "=== Service Logs (last 50 lines) ==="
+journalctl -u tenant-manager-app -n 50 --no-pager
+echo ""
+
+echo "=== Systemd Service Status ==="
+systemctl status tenant-manager-app --no-pager -l
+EOF
+    
+    # Make scripts executable
+    chmod +x "${INSTALL_DIR}"/*.sh
+    chown $APP_USER:$APP_USER "${INSTALL_DIR}"/*.sh
+    
+    log "Management scripts created with virtual environment support"
+    log "Available scripts: start.sh, stop.sh, restart.sh, status.sh, update.sh, env_info.sh, diagnose.sh"
+}
+
+# Main deployment function
+main() {
+    log "Starting CentOS deployment for Tenant Manager App..."
+    
+    parse_args "$@"
+    check_root
+    check_source_safety
+    get_centos_version
+    
+    # Get source directory for reference
+    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    
+    info "Deployment Configuration:"
+    info "  Source Directory: $SCRIPT_DIR (will remain unchanged)"
+    info "  Target Directory: $INSTALL_DIR (new deployment copy)"
+    info "  Web Server: $WEB_SERVER"
+    info "  Domain: $DOMAIN"
+    info "  Port: $PORT"
+    info "  SSL: $ENABLE_SSL"
+    info "  External Flask Access: $ENABLE_EXTERNAL_FLASK"
+    info "  Application User: $APP_USER"
+    
+    warning "Note: This deployment creates a NEW COPY of your application."
+    warning "Original files in $SCRIPT_DIR will remain completely unchanged."
+    
+    if [ "$ENABLE_EXTERNAL_FLASK" = "true" ]; then
+        warning ""
+        warning "⚠️  SECURITY WARNING: You have enabled external Flask access!"
+        warning "⚠️  Flask app will be accessible on port 5000 from any IP address!"
+        warning "⚠️  This is NOT recommended for production environments!"
+        warning "⚠️  Consider using only the web server proxy for external access."
+        warning ""
+    fi
+    
+    # Deployment steps
+    update_system
+    install_dependencies
+    install_python
+    create_app_user
+    copy_application
+    setup_python_env
+    create_env_config
+    create_systemd_service
+    
+    # Web server setup
+    if [ "$WEB_SERVER" = "nginx" ]; then
+        setup_nginx
+    else
+        setup_apache
+    fi
+    
+    setup_ssl
+    configure_firewall
+    create_management_scripts
+    start_services
+    
+    # Final status
+    log "=== Deployment Summary ==="
+    info "✅ Application deployed as NEW COPY at: $INSTALL_DIR"
+    info "✅ Python virtual environment created at: $INSTALL_DIR/venv"
+    info "✅ All dependencies installed in isolated environment"
+    info "✅ Original source files: UNCHANGED in $SCRIPT_DIR"
+    info "✅ Service name: $SERVICE_NAME"
+    info "✅ Web server: $WEB_SERVER (Apache httpd is default, Nginx available with --nginx)"
+    info "✅ Application URL: http${ENABLE_SSL:+s}://${DOMAIN}:${PORT}/${APP_NAME}"
+    
+    if [ "$ENABLE_EXTERNAL_FLASK" = "true" ]; then
+        warning "⚠️  Flask app is also accessible directly at: http://${DOMAIN}:5000/${APP_NAME}/"
+        warning "⚠️  External Flask access enabled - this is a security consideration!"
+    else
+        info "🔒 Flask app is only accessible locally (secure configuration)"
+    fi
+    
+    warning "⚠️  IMPORTANT: Please edit $INSTALL_DIR/.env with your SSE API credentials!"
+    warning "⚠️  Original files in $SCRIPT_DIR remain completely unchanged!"
+    
+    info "Virtual Environment Details:"
+    info "  Location: $INSTALL_DIR/venv"
+    info "  Python: $INSTALL_DIR/venv/bin/python"
+    info "  Pip: $INSTALL_DIR/venv/bin/pip"
+    info "  Packages: Use $INSTALL_DIR/env_info.sh to view installed packages"
+    
+    info "Management commands:"
+    info "  Start:   systemctl start $SERVICE_NAME"
+    info "  Stop:    systemctl stop $SERVICE_NAME"
+    info "  Restart: systemctl restart $SERVICE_NAME"
+    info "  Status:  systemctl status $SERVICE_NAME"
+    info "  Logs:    journalctl -u $SERVICE_NAME -f"
+    
+    info "Or use the convenience scripts in $INSTALL_DIR:"
+    info "  ./start.sh, ./stop.sh, ./restart.sh, ./status.sh, ./update.sh, ./env_info.sh, ./diagnose.sh"
+    
+    info "Virtual Environment Management:"
+    info "  Activate: source $INSTALL_DIR/venv/bin/activate"
+    info "  Install package: $INSTALL_DIR/venv/bin/pip install <package>"
+    info "  List packages: $INSTALL_DIR/venv/bin/pip list"
+    
+    info "Troubleshooting:"
+    info "  Diagnose issues: cd $INSTALL_DIR && ./diagnose.sh"
+    info "  View logs: journalctl -u $SERVICE_NAME -f"
+    info "  Test app manually: cd $INSTALL_DIR && sudo -u $APP_USER venv/bin/python -c 'import app'"
+    
+    log "Deployment completed successfully! 🎉"
+    
+    # Show next steps
+    echo ""
+    info "Next Steps:"
+    info "1. Edit $INSTALL_DIR/.env with your SSE API credentials"
+    info "2. Restart the service: systemctl restart $SERVICE_NAME"
+    info "3. Access the application at: http${ENABLE_SSL:+s}://${DOMAIN}:${PORT}/${APP_NAME}"
+    info "4. Check logs if needed: journalctl -u $SERVICE_NAME -f"
+}
+
+# Run main function with all arguments
+main "$@"
