@@ -11,6 +11,7 @@ __pycache__/
 .Python
 env/
 venv/
+.venv/
 ENV/
 env.bak/
 venv.bak/
@@ -20,19 +21,32 @@ instance/
 .webassets-cache
 flask_session/
 
-# Logs
+# Production logs and runtime files
 *.log
 logs/
 app.log
+*.pid
+nohup.out
 
-# IDE
+# Backup files and temporary files
+*_backup.*
+*_temp.*
+*.backup
+*.bak
+*.tmp
+app_optimized.py
+README_NEW.md
+.gitmessage
+
+# IDE and editors
 .vscode/
 .idea/
 *.swp
 *.swo
 *~
+.sublime-*
 
-# OS
+# OS specific files
 .DS_Store
 .DS_Store?
 ._*
@@ -41,10 +55,8 @@ app.log
 ehthumbs.db
 Thumbs.db
 
-# Backup files
-*_backup.py
-app_optimized.py
-README_NEW.md
+# Windows specific
+desktop.ini
 
 # Distribution / packaging
 .Python
