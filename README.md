@@ -95,7 +95,7 @@ All production scripts support these standardized commands:
 
 ```bash
 # Clone the repository
-git clone https://github.com/YOUR_USERNAME/sse-tenant-manager.git
+git clone https://github.com/rajesharora27/sse-tenant-manager.git
 cd sse-tenant-manager
 
 # Create and configure environment
