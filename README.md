@@ -1,6 +1,6 @@
 # SSE Tenant Manager
 
-A production-ready Flask web application for managing Cisco SSE (Secure Service Edge) tenants through an intuitive web interface.
+A production-ready Flask web application for managing Cisco SSE (Secure Service Edge) tenants through an intuitive web interface with comprehensive deployment and management tools.
 
 ## 🚀 Features
 
@@ -9,45 +9,68 @@ A production-ready Flask web application for managing Cisco SSE (Secure Service 
 - 🔐 **OAuth 2.0 Authentication** - Secure authentication with SSE API
 - 📋 **Complete Tenant Management** - List, view, create, edit, and delete tenants
 - 🔍 **Advanced Search & Filter** - Real-time tenant search and filtering
-- 📊 \*\*Bu4. Test API connectivity using curl or Postman
-
-5. Ensure all required environment variables are set
-
-## 📝 Changelog
-
-### Recent Updates
-
-#### Fixed Issues
-
-- ✅ **Tenant Update Functionality**: Resolved tenant update failures due to API field compatibility issues
-- ✅ **Edit URL Generation**: Fixed double-slash URLs in edit links when tenant ID was missing
-- ✅ **API Error Handling**: Added intelligent retry logic for unsupported API fields
-- ✅ **Form Submission**: Fixed POST request routing for tenant edit forms
-- ✅ **Template Context**: Resolved missing variables in edit tenant templates
-
-#### Enhancements
-
-- ✅ **Enhanced Export**: Added bulk export functionality for all tenants
-- ✅ **Improved Error Messages**: Better user feedback for API errors
-- ✅ **Cross-platform Compatibility**: Improved support for Windows, Linux, and macOS
-- ✅ **Debugging Cleanup**: Removed development debugging code for production
-
-#### API Compatibility
-
-- ✅ **Field Mapping**: Proper handling of CREATE vs UPDATE API field differences
-- ✅ **Organization Types**: Automatic field exclusion for unsupported organization types
-- ✅ **Token Management**: Enhanced authentication token handling
-
-## 🔐 Security Considerationsperations\*\* - Select and delete multiple tenants efficiently
-
+- 📊 **Bulk Operations** - Select and delete multiple tenants efficiently
 - 💾 **Data Export** - Download individual tenant data or bulk export as JSON
-- 🔄 **Smart Token Management** - Automatic token renewal and status monitoring
+- � **Smart Token Management** - Automatic token renewal and status monitoring
+
+### Production Management
+
+- 🖥️ **Cross-Platform Scripts** - Enhanced production scripts for Linux/Mac, Windows, and CentOS
+- 🔄 **Background Execution** - Applications run in background and persist after terminal exit
+- 📊 **Process Management** - PID-based tracking with graceful shutdown capabilities
+- 📋 **Status Monitoring** - Comprehensive status reporting and health checks
+- 🎯 **Management Commands** - Standardized start/stop/restart/status operations
+- 🚀 **Automated Deployment** - Complete CentOS deployment with web server integration
 
 ### User Interface
 
 - 📱 **Fully Responsive Design** - Optimized for desktop, tablet, and mobile devices
 - 🎨 **Modern Bootstrap 5 Interface** - Clean, professional, and intuitive design
 - ⚡ **Real-time Updates** - Live token status indicator and dynamic content
+
+## 🛠️ Production Scripts
+
+### Quick Start Commands
+
+| Platform | Command | Description |
+|----------|---------|-------------|
+| **Linux/Mac** | `./run_production.sh start` | Start with Gunicorn daemon |
+| **Windows** | `run_production.bat start` | Start with Waitress background |
+| **PowerShell** | `.\run_production.ps1 start` | Start with PowerShell management |
+| **CentOS** | `sudo ./deploy_centos.sh` | Full system deployment |
+
+### Available Commands
+
+All production scripts support these standardized commands:
+
+```bash
+{start|stop|restart|status}
+```
+
+#### Examples:
+
+```bash
+# Start the application in background
+./run_production.sh start
+
+# Check application status
+./run_production.sh status
+
+# Restart the application
+./run_production.sh restart
+
+# Stop the application gracefully
+./run_production.sh stop
+```
+
+### Features:
+
+- ✅ **Background Execution** - Applications persist after terminal exit
+- ✅ **PID Management** - Reliable process tracking with `logs/app.pid`
+- ✅ **Graceful Shutdown** - SIGTERM followed by SIGKILL if necessary
+- ✅ **Status Reporting** - Process details, URLs, and log locations
+- ✅ **Error Handling** - Colored output with comprehensive error reporting
+- ✅ **Log Management** - Separate access (`logs/access.log`) and error (`logs/error.log`) logs
 - 📄 **Interactive Modal Dialogs** - Quick tenant details and actions without page refresh
 - 🔍 **Enhanced Tenant Details** - Double-click any tenant row for comprehensive view
 
@@ -65,6 +88,57 @@ A production-ready Flask web application for managing Cisco SSE (Secure Service 
 - ✅ **Improved Error Handling** - Enhanced error recovery for API compatibility
 - ✅ **Enhanced Export Features** - Both individual and bulk tenant data export
 - ✅ **URL Routing Fixes** - Resolved edit link generation issues
+
+## 📥 Installation
+
+### From GitHub
+
+```bash
+# Clone the repository
+git clone https://github.com/YOUR_USERNAME/sse-tenant-manager.git
+cd sse-tenant-manager
+
+# Create and configure environment
+cp .env.template .env
+# Edit .env with your SSE credentials
+
+# Start production application
+./run_production.sh start     # Linux/Mac
+run_production.bat start      # Windows
+.\run_production.ps1 start    # PowerShell
+```
+
+### Prerequisites
+
+- **Python 3.8+** (Python 3.9+ recommended)
+- **pip** (Python package manager)
+- **Virtual environment support** (venv or conda)
+- **SSE API Access** (Username and Password)
+
+### System Requirements
+
+| Platform | Server | Requirements |
+|----------|--------|--------------|
+| **Linux/Mac** | Gunicorn | Python 3.8+, pip, venv |
+| **Windows** | Waitress | Python 3.8+, pip, venv |
+| **CentOS** | Gunicorn + Apache/Nginx | Root access, systemd |
+
+## 🚀 Quick Deployment
+
+### Production Deployment (CentOS)
+
+```bash
+# Full automated deployment
+sudo ./deploy_centos.sh --apache
+
+# With Nginx
+sudo ./deploy_centos.sh --nginx
+
+# With custom domain and SSL
+sudo ./deploy_centos.sh --nginx --domain myapp.company.com --ssl
+```
+
+### Development Setup
 - ✅ **Cross-platform Compatibility** - Tested on Windows, Linux, and macOS
 
 ## 📋 Requirements
